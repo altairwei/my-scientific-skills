@@ -14,3 +14,6 @@ Thumbs.db
 
 # Skill packaging artifacts
 *.skill
+
+# Third-party skill repositories cloned for reference (not distributed)
+external/

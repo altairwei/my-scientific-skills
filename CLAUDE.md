@@ -18,6 +18,14 @@ Current categories: `bioinformatics/`, `data-science/`, `scientific-writing/`. A
 
 Do **not** create a `README.md` inside individual skill directories — `SKILL.md` is the only entry point.
 
+## `external/` — third-party reference repositories
+
+`external/` holds other people's skill repositories (e.g. clones of `posit-dev/skills`, `anthropics/skills`) kept purely for study and reference. It is gitignored and never distributed with this repo.
+
+- Never register skills from `external/` in `marketplace.json` or copy them into category directories verbatim — respect each project's own license, and write original skills here instead.
+- It is fine to read files under `external/` when the user asks to learn from or compare against them.
+- CI only scans `<category>/<skill>/SKILL.md` (two levels deep), so `external/` contents are naturally excluded.
+
 ## SKILL.md conventions
 
 Every skill requires YAML frontmatter at minimum:
