@@ -11,10 +11,12 @@
   "plugins": [
     {
       "name": "bioinformatics",
-      "description": "Skills for bioinformatics and computational biology workflows (NGS, single-cell, sequence analysis)",
+      "description": "Skills for bioinformatics and computational biology workflows (population genomics, NGS, single-cell, sequence analysis)",
       "source": "./",
       "strict": false,
-      "skills": []
+      "skills": [
+        "./bioinformatics/population-genomics"
+      ]
     },
     {
       "name": "data-science",

@@ -6,9 +6,11 @@ A collection of [Claude Skills](https://docs.anthropic.com/en/docs/claude-code/s
 
 ### bioinformatics
 
-Skills for bioinformatics and computational biology workflows (NGS, single-cell, sequence analysis, ...).
+Skills for bioinformatics and computational biology workflows (population genomics, NGS, single-cell, sequence analysis, ...).
 
-*No skills yet — contributions welcome.*
+| Skill | Description |
+|-------|-------------|
+| [population-genomics](bioinformatics/population-genomics/) | Population-genomics analysis workflows — QC, LD pruning, kinship, PCA, ADMIXTURE, TreeMix, f-statistics, and fastsimcoal2 demographic inference from VCF/PLINK data |
 
 ### data-science
 
@@ -30,6 +32,7 @@ Skills for scientific writing, literature work, and publishing workflows.
 
 ```
 /plugin marketplace add <your-github-user>/my-scientific-skills
+/plugin install bioinformatics@my-scientific-skills
 /plugin install data-science@my-scientific-skills
 ```
 
