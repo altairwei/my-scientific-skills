@@ -1,0 +1,36 @@
+{
+  "name": "my-scientific-skills",
+  "owner": {
+    "name": "Altair Wei",
+    "email": "altair_wei@outlook.com"
+  },
+  "metadata": {
+    "description": "A collection of Claude Skills for scientific computing and research workflows — bioinformatics, data science, and scientific writing.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "bioinformatics",
+      "description": "Skills for bioinformatics and computational biology workflows (NGS, single-cell, sequence analysis)",
+      "source": "./",
+      "strict": false,
+      "skills": []
+    },
+    {
+      "name": "data-science",
+      "description": "Skills for data analysis, statistics, and visualization",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./data-science/exploratory-data-analysis"
+      ]
+    },
+    {
+      "name": "scientific-writing",
+      "description": "Skills for scientific writing, literature work, and publishing workflows",
+      "source": "./",
+      "strict": false,
+      "skills": []
+    }
+  ]
+}

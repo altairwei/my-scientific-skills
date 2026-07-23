@@ -1,0 +1,26 @@
+name: Check skills
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  skill-tokens:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Count skill tokens
+        run: |
+          found=0
+          for skill_md in */*/SKILL.md; do
+            [ -e "$skill_md" ] || continue
+            found=1
+            uv run count-skill-tokens.py "$(dirname "$skill_md")"
+            echo
+          done
+          [ "$found" = "1" ] || echo "No skills found."
