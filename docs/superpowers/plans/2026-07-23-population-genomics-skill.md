@@ -408,9 +408,19 @@ snpoutname:      OUTDIR/pca.snp
 indivoutname:    OUTDIR/pca.ind
 ```
 
-Run `convertf -p OUTDIR/par.convertf`.
+Run `convertf -p OUTDIR/par.convertf`. This generates `pca.geno`, `pca.snp`, and `pca.ind` — the `.ind` third column comes from the `.ped` phenotype column (often `1`/`2` or `-9`), so set population labels next.
 
-3. Write `OUTDIR/par.smartpca`:
+3. Set population labels in `pca.ind`. The `.ind` has three whitespace-separated columns (`sample_id  sex  label`); replace the third column with the population label from `popmap.txt` (`IID <tab> POP`). One way:
+
+```bash
+awk 'NR==FNR {pop[$1]=$2; next} {print $1, $2, pop[$1] ? pop[$1] : "U"}' \
+  OUTDIR/popmap.txt OUTDIR/pca.ind > OUTDIR/pca.ind.labeled && \
+  mv OUTDIR/pca.ind.labeled OUTDIR/pca.ind
+```
+
+These labels drive smartpca's outlier removal (per-population) and PCA plotting — leaving them as `1`/`2` makes both useless.
+
+4. Write `OUTDIR/par.smartpca`:
 
 ```text
 genotypename:   OUTDIR/pca.geno
@@ -423,7 +433,7 @@ numoutlieriter: 5
 altnormstyle:   YES
 ```
 
-4. Run:
+5. Run:
 
 ```bash
 smartpca -p OUTDIR/par.smartpca > OUTDIR/smartpca.log 2>&1
