@@ -58,6 +58,34 @@ The reusable "磨合" (tuning) knowledge distills into three layers:
   naming; TreeMix input requires plink2treemix allele-count format; fsc28
   .tpl/.est structural constraints.
 
+## Tool documentation policy
+
+PopGenAgent ships ~80 raw tool docs in `knowledge/tool/` (with duplicates —
+e.g. `ROH.txt`/`ROH1.txt`, three LD-pruning files) as a RAG corpus: its LLM
+needed retrieval grounding to avoid hallucinating niche tool usage.
+
+This skill deliberately does NOT reproduce that corpus, because:
+
+1. Repo policy: no verbatim copies from `external/` (license + originality).
+2. Redundancy: most of that content duplicates `tool --help` output, official
+   docs, and Claude's existing knowledge.
+3. Version drift: static docs describe some version of a tool, while the
+   installed binary's `--help` is ground truth. Claude Code can consult live
+   help output and official docs at runtime — a capability PopGenAgent's
+   static RAG lacked. Copied stale docs would become an error source.
+
+What IS carried over: the distilled, experience-bearing content of those docs
+(command recipes, thresholds, file-format pitfalls) lives in the five
+references. Each reference must be **self-sufficient** for the tools it
+covers: for failure-prone, version-sensitive, or thinly-documented tools
+(smartpca/convertf EIGENSTRAT formats, fsc28 `.tpl`/`.est` grammar, easySFS
+CLI, ADMIXTOOLS R calls), the reference includes the format specs and CLI
+idioms in full, written originally.
+
+Corollary working discipline (goes into SKILL.md): before writing a command
+for a tool whose exact flags are uncertain, run `tool --help` or consult
+official documentation first — ground the command, don't recall it.
+
 ## Harness adaptation (Claude Code, not LangChain)
 
 The orchestration discipline is expressed as native Claude Code behavior:
@@ -94,7 +122,8 @@ bioinformatics/population-genomics/
   convention; < 100 tokens. `metadata` (author, version), `license: MIT`.
 - **Positioning**: this is field experience, not a fixed pipeline — select a
   focused workflow from the user's goal; ask when the goal is ambiguous.
-- **Working discipline** (the harness adaptation table above, as prose/bullets).
+- **Working discipline** (the harness adaptation table above, as prose/bullets,
+  plus the grounding rule from the Tool documentation policy).
 - **Workflow map**: the canonical 20-step core workflow as a table, each row
   annotated with which reference file covers it; plus focused-workflow
   shortcuts (qc-only → preprocessing ref; pca/admixture → structure ref; etc.).
@@ -107,6 +136,9 @@ bioinformatics/population-genomics/
 
 Each reference: **When to use → Command templates → Parameter decision rules →
 Output verification checklist → Figure reading guide → Common pitfalls.**
+Each reference is self-sufficient for its tools (see Tool documentation
+policy): file-format specs and CLI idioms for failure-prone tools are included
+in full rather than assumed known.
 
 1. `preprocessing-and-qc.md` — PLINK QC thresholds (`--maf 0.05 --geno 0.05
    --mind 0.1 --biallelic-only strict`); two-round LD pruning (r² 0.2 vs 0.1
