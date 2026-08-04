@@ -16,7 +16,8 @@
       "strict": false,
       "skills": [
         "./bioinformatics/population-genomics",
-        "./bioinformatics/bioinfo-project-organization"
+        "./bioinformatics/bioinfo-project-organization",
+        "./bioinformatics/pipeline-maker"
       ]
     },
     {
