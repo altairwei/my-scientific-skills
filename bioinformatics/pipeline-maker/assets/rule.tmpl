@@ -1,0 +1,13 @@
+# pipeline-maker asset — single-rule skeleton. Replace <NAME>, <INPUT>, <OUTPUT>,
+# <WILDCARD>, <COMMAND>. Keep the log directive (survives failures for debugging).
+rule <NAME>:
+    input:
+        <INPUT>
+    output:
+        <OUTPUT>
+    log:
+        "logs/{<WILDCARD>}/<NAME>.log"
+    params:
+        <PARAMS>
+    shell:
+        "<COMMAND> > {log} 2>&1"

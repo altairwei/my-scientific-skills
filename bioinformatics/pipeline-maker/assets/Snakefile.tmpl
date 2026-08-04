@@ -1,0 +1,6 @@
+# Main Snakefile entry — pipeline-maker asset.
+# Load config, then include the modular rule files. Adapt the module/use-rule
+# form per references/modularization-and-config.md if you prefer module isolation.
+configfile: "config.yaml"
+
+include: "workflow/rules/main.smk"

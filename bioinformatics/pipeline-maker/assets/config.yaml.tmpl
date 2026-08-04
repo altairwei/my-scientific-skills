@@ -1,0 +1,13 @@
+# pipeline-maker asset — adapt to your project.
+# Multi-sample: prefer a samples.tsv table and read it here via a thin loader.
+samples:
+  - sample_01
+  - sample_02
+
+paths:
+  input_dir: data/
+  output_dir: results/
+
+params:
+  threads: 4
+  # Add tool-specific params here; reference them in rules via config[].

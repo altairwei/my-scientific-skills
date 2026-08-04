@@ -1,0 +1,12 @@
+# pipeline-maker asset — modular rule file with a wildcarded example showing the
+# generalization pattern (one rule over many samples). Adapt the wildcard and
+# the command.
+rule <NAME>:
+    input:
+        "{sample}.fastq"
+    output:
+        "{sample}.bam"
+    log:
+        "logs/{sample}/<NAME>.log"
+    shell:
+        "tool {input} > {output} 2> {log}"

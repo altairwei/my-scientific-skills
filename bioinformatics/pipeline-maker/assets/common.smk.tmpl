@@ -1,0 +1,12 @@
+# pipeline-maker asset — shared helper functions used across stage rule files.
+# Rule-formatting helpers (string builders for shell args) belong here; pure
+# analysis logic belongs in scripts/*.py, not here.
+
+def get_log_path(wildcards, rule_name):
+    """Standard log path per sample+rule. Called (not bare-ref) in rules."""
+    return f"logs/{wildcards.sample}/{rule_name}.log"
+
+# Example: a resource-arg builder (GATK --resource needs label+VCF paired).
+# Adapt the pairing pattern to your tools.
+# def get_resource_args(wildcards):
+#     return " ".join(f"--resource:{label},key=... {path}" for label, path in RESOURCES)
