@@ -11,6 +11,7 @@ Skills for bioinformatics and computational biology workflows (population genomi
 | Skill | Description |
 |-------|-------------|
 | [population-genomics](bioinformatics/population-genomics/) | Population-genomics analysis workflows — QC, LD pruning, kinship, PCA, ADMIXTURE, TreeMix, f-statistics, and fastsimcoal2 demographic inference from VCF/PLINK data |
+| [bioinfo-project-organization](bioinformatics/bioinfo-project-organization/) | Organize a computational biology / scientific research project for reproducibility — Noble (2009) layout, per-experiment `runall`, a chronological `lab-notebook.md`, Git practices, and an `artifacts/` directory for large outputs |
 
 ### data-science
 
