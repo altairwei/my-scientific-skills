@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# runall — drive a single experiment. Every command that produces this
+# experiment's results lives here, in order. Rerun this script to reproduce
+# the experiment from scratch.
+#
+# Adapt the variables and steps below to your experiment. Keep the structure:
+#   - all paths/files as variables at the top
+#   - each expensive step restartable (skips work already done)
+#   - relative paths (relative to this experiment directory)
+#   - generous comments — someone should understand the workflow from these
+set -euo pipefail
+
+cd "$(dirname "$0")"   # run from the experiment directory, whatever the cwd
+
+# --- Paths (edit these) -------------------------------------------------
+DATA_DIR="../../data"          # project-level data
+RESULTS_DIR="results"
+mkdir -p "$RESULTS_DIR"
+
+# --- Step 1: preprocess -------------------------------------------------
+# Restartable: skip if the output already exists.
+if [ ! -f "$RESULTS_DIR/clean.parquet" ]; then
+  echo "[1/2] preprocessing..."
+  # TODO: python ../../scripts/preprocess.py "$DATA_DIR/input.tsv" "$RESULTS_DIR/clean.parquet"
+  :
+fi
+
+# --- Step 2: analyze ----------------------------------------------------
+if [ ! -f "$RESULTS_DIR/scores.tsv" ]; then
+  echo "[2/2] analyzing..."
+  # TODO: python ../../scripts/analyze.py "$RESULTS_DIR/clean.parquet" "$RESULTS_DIR/scores.tsv"
+  :
+fi
+
+echo "done. results in $RESULTS_DIR/"

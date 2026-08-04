@@ -1,0 +1,35 @@
+# .gitignore for a computational biology / scientific research project.
+# Edit to fit your project — this is a starting point, not scripture.
+
+# --- Artifacts: track the provenance README, ignore the bulk -------------
+artifacts/*
+!artifacts/README.md
+
+# --- Python -------------------------------------------------------------
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# --- Conda / virtualenv directories -------------------------------------
+envs/
+.env/
+
+# --- Large binary file types (keep these out of git) --------------------
+# Common computational-biology bulk formats; add any you produce.
+*.h5
+*.pdb
+# *.bam
+# *.vcf
+# *.hdf5
+
+# --- Large result tables (uncomment if you keep raw results out of git) -
+# results/
+# *.parquet
+
+# --- Jupyter ------------------------------------------------------------
+.ipynb_checkpoints/
+
+# --- OS cruft -----------------------------------------------------------
+.DS_Store
+Thumbs.db
