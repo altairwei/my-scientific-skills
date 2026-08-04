@@ -8,7 +8,7 @@ Read this when the task involves: converting VCF ↔ PLINK formats, filtering va
 
 ## Command templates
 
-In all templates, replace `OUTDIR` with the session output directory. Verify tool availability first (`which plink king`); if missing, propose `conda install -c bioconda plink king` and wait for consent.
+In all templates, replace `OUTDIR` with the experiment's `results/` directory (see the bioinfo-project-organization skill). Verify tool availability first (`which plink king`); if missing, propose `conda install -c bioconda plink king` and wait for consent.
 
 ### VCF → PLINK binary
 

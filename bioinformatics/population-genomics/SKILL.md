@@ -22,7 +22,7 @@ These habits are what separate a reliable analysis from a plausible-looking one.
 - **Ground commands, don't recall them.** When unsure of a flag, run `<tool> --help` or check the official docs for the *installed* version before writing the command. Memory of tool flags drifts; the binary does not lie.
 - **Debug with full context.** When a step fails, read the actual stderr/log, compare against the reference's decision rules, fix, and retry. After 2–3 failed repairs, stop and report the diagnosis — do not loop silently.
 - **Decide with evidence, together.** Choices like best K (ADMIXTURE), number of migration edges (TreeMix), or SFS projection sizes are judgment calls. Present the evidence table (CV errors, likelihoods) and let the user pick.
-- **Keep provenance.** Work in a dedicated output directory, keep generated scripts and logs next to results, and never modify the raw input files.
+- **Keep provenance.** Run the analysis as one experiment under `experiments/YYYY-MM-DD/`; reusable scripts live at the project's `scripts/`, the experiment's `runall` records the command sequence, and outputs go in the experiment's `results/`. Never modify the raw input files. *(See the bioinfo-project-organization skill for the full project layout.)*
 
 ## Workflow map
 
@@ -55,7 +55,7 @@ Focused shortcuts by goal:
 
 - **Inputs**: PLINK binary triplets (`.bed/.bim/.fam`) or VCF/BCF. Convert VCF → PLINK early when the task needs PLINK-based tools (see preprocessing-and-qc).
 - **Population map**: many analyses (per-population LD decay, TreeMix, ADMIXTURE plotting, easySFS) need a sample→population file. Derive it from the `.fam` or ask the user.
-- **Output layout**: create one output directory per analysis session (e.g. `popgen-output/`) with subdirectories per analysis. Never write outputs next to the raw data.
+- **Output layout**: each analysis session is one experiment directory under `experiments/YYYY-MM-DD/` with its `runall` and `results/`. Never write outputs next to the raw data.
 - **Raw data is immutable**: filtering and conversion always write new files; never edit inputs in place.
 
 ## References (load on demand)
@@ -81,4 +81,4 @@ For requests beyond the core workflow, state what is involved and consult offici
 - Show real numbers from real outputs — never state a finding (best K, significant D, expansion signal) you did not compute from the files.
 - Sample sizes shrink after QC and relatedness removal — re-check per-population counts after each filtering step and warn the user when a population drops below what the statistic needs (roughly: LD decay ≥ 20, ADMIXTURE/TreeMix ≥ 5, f-stats ≥ 2, and treat any singleton result as exploratory).
 - Figures are deliverables: save them to files, then Read and interpret them — a plot nobody looked at is not a result.
-- Record the exact commands and parameter choices (thresholds, K range, m range) in the final summary so the analysis is reproducible.
+- Record the exact commands and parameter choices (thresholds, K range, m range) in the experiment's `runall` and the `lab-notebook.md` entry — not just a final summary — so the analysis is reproducible.
