@@ -1,0 +1,67 @@
+# Tools — interactive-repl
+
+Both `python-repl` and `r-repl` expose the same six tools. Tool names are scoped per
+language: `mcp__<plugin>_python-repl__<tool>` and `mcp__<plugin>_r-repl__<tool>`. Every
+tool takes a `session` name first — sessions are auto-created on first `run_code` and
+are independent per server (a `lmp` Python session and a `lmp` R session are unrelated).
+
+## run_code(session, code, timeout=300) → RunResult
+
+Execute code in the named persistent session. Variables, imports, and loaded data
+persist across calls.
+
+```jsonc
+{
+  "stdout": "2\n",
+  "stderr": "",
+  "error": null,                 // traceback / conditionMessage, or null on success
+  "plots": ["/path/to/fig-1-...png"],
+  "truncated": false,            // true if stdout exceeded the cap
+  "degraded": false              // true if stdout was empty and stderr was surfaced
+}
+```
+
+- `error` is `null` on success; the response **always** returns (errors are caught —
+  `tryCatch` in R, `try/except` in Python — so a bad cell never hangs the session).
+- `plots` lists PNGs auto-saved by the worker (matplotlib figures / ggplot objects).
+  `Read` a path to view it. Figures are closed after save.
+- The `timeout` parameter is advisory in v1 — the worker blocks until the code returns;
+  a stuck cell surfaces as a `worker died` error (call `restart`).
+
+## list_variables(session) → VarList
+
+```jsonc
+{ "variables": [ { "name": "df", "type": "DataFrame", "size": "100 x 5",
+                   "preview": "...", "has_children": true } ] }
+```
+
+Lists non-underscore session variables with a type-dispatched summary.
+
+## inspect_variable(session, name, path?) → InspectResult
+
+```jsonc
+{ "name": "df", "repr": "...", "error": null }
+```
+
+Drill into a variable by path: `inspect_variable("df", ["colname"])` (Python) or
+`inspect_variable("lst", [0])`. Returns the object's `str`/`repr`/`head`.
+
+## inject(session, path) → Ack
+
+```jsonc
+{ "ok": true, "message": "injected /path/to/kernel.py" }
+```
+
+Exec a `kernel.py` (Python) / `kernel.R` (R) sidecar into the session namespace. Call
+once per sidecar per session, before using its helpers. See `sidecar-authoring.md`.
+
+## restart(session) → Ack
+
+Kill + respawn the named worker — wipes the namespace. Use after a `worker died`
+error or to deliberately reset. **Loses DB connections and loaded data** — use sparingly.
+
+## session_info(session) → SessionInfo
+
+```jsonc
+{ "session": "lmp", "running": true, "pid": 12345, "plot_dir": "/.../plots" }
+```
