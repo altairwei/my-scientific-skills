@@ -65,3 +65,28 @@ def test_r_error_returns_response(tmp_path):
         assert r2["error"] is None and "2" in r2["stdout"]
     finally:
         proc.terminate(); conn.close()
+
+
+def test_r_ggplot_saved_to_png(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    proc, conn = _spawn_and_connect()
+    try:
+        # last expression is the ggplot (visible) → withVisible → ggsave
+        r = _call(conn, "library(ggplot2); "
+                        "ggplot(data.frame(x=1:3, y=c(1,4,9)), aes(x,y)) + geom_point() + geom_line()")
+        assert r["error"] is None
+        assert len(r["plots"]) >= 1
+        import os
+        assert os.path.exists(r["plots"][0])
+    finally:
+        proc.terminate(); conn.close()
+
+
+def test_dt_table_overridden_to_kable(tmp_path):
+    proc, conn = _spawn_and_connect()
+    try:
+        r = _call(conn, "dt_table(data.frame(a=1:3, b=c('x','y','z')))")
+        assert r["error"] is None
+        assert "|" in r["stdout"]  # kable prints a markdown-style table
+    finally:
+        proc.terminate(); conn.close()

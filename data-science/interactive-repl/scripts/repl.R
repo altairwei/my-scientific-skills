@@ -26,6 +26,12 @@ write_json <- function(obj) {
   cat(jsonlite::toJSON(obj, auto_unbox = TRUE, null = "null"), "\n", sep = "", file = con)
 }
 
+.plot_dir <- function() {
+  d <- file.path(Sys.getenv("CLAUDE_PLUGIN_DATA", "/tmp/interactive-repl-data"), "plots")
+  dir.create(d, recursive = TRUE, showWarnings = FALSE)
+  d
+}
+
 run_cell <- function(code) {
   out <- ""; plots <- character(0)
   stdout_con <- textConnection("out", "w", local = TRUE)
@@ -36,7 +42,7 @@ run_cell <- function(code) {
       r <- withVisible(eval(ex[[i]], envir = globalenv()))
       if (isTRUE(r$visible)) {
         if (inherits(r$value, "ggplot")) {
-          f <- tempfile(fileext = ".png")
+          f <- tempfile(pattern = "fig-", fileext = ".png", tmpdir = .plot_dir())
           tryCatch(ggplot2::ggsave(f, r$value, width = 12, height = 8, dpi = 110),
                    error = function(e) NULL)
           plots <- c(plots, f)
