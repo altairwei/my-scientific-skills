@@ -1,4 +1,4 @@
-import json, subprocess, sys, pathlib
+import json, os, subprocess, sys, pathlib
 
 HERE = pathlib.Path(__file__).parent
 WORKER = HERE.parent / "scripts" / "python_worker.py"
@@ -63,5 +63,30 @@ def test_multiline_exec():
         r = _call(p, "y = 0\nfor i in range(3): y += i\nprint(y)")
         assert r["error"] is None
         assert "3" in r["stdout"]  # 0 + 1 + 2
+    finally:
+        p.stdin.close(); p.terminate()
+
+
+def test_matplotlib_figure_captured_to_png(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    p = _spawn()
+    try:
+        r = _call(p, "import matplotlib.pyplot as plt; plt.plot([1,2,3]); plt.xlabel('x')")
+        assert r["error"] is None
+        assert len(r["plots"]) >= 1
+        assert os.path.exists(r["plots"][0])
+        # figure was closed — a second call with no new figure returns no plots
+        r2 = _call(p, "1 + 1")
+        assert r2["plots"] == []
+    finally:
+        p.stdin.close(); p.terminate()
+
+
+def test_plt_show_is_noop():
+    p = _spawn()
+    try:
+        # plt.show() must not block — if it did, the call would hang and time out
+        r = _call(p, "import matplotlib.pyplot as plt; plt.plot([1,2]); plt.show()")
+        assert r["error"] is None
     finally:
         p.stdin.close(); p.terminate()
