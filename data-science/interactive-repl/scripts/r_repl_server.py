@@ -81,6 +81,12 @@ _LIST_VARS_R = (
 )
 
 
+def _base_sidecar_src() -> str:
+    """The base kernel.R sidecar (who/peek/fig) — auto-sourced at session start."""
+    p = HERE / "kernel.R"
+    return p.read_text() if p.exists() else ""
+
+
 def _start(session: str) -> _Session:
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.bind(("127.0.0.1", 0))
@@ -103,6 +109,13 @@ def _start(session: str) -> _Session:
     ready = json.loads(buf.decode())
     if not ready.get("ready"):
         raise RuntimeError(f"R worker failed to start: {ready!r} {proc.stderr.read()!r}")
+    # Auto-source the base sidecar so who/peek/fig are available immediately.
+    base = _base_sidecar_src()
+    if base:
+        conn.sendall(_common.encode_line({"id": "init", "code": base}).encode())
+        buf = b""
+        while not buf.endswith(b"\n"):
+            buf += conn.recv(65536)
     return _Session(proc, conn)
 
 
