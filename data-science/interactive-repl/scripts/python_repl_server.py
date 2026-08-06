@@ -77,6 +77,12 @@ _LIST_VARS_CODE = (
 )
 
 
+def _base_sidecar_src() -> str:
+    """The base kernel.py sidecar (peek/who/fig) — auto-injected at session start."""
+    p = HERE / "kernel.py"
+    return p.read_text() if p.exists() else ""
+
+
 def _start(session: str) -> subprocess.Popen:
     p = subprocess.Popen(
         [sys.executable, str(WORKER)],
@@ -86,6 +92,12 @@ def _start(session: str) -> subprocess.Popen:
     ready = json.loads(p.stdout.readline())
     if not ready.get("ready"):
         raise RuntimeError(f"worker failed to start: {ready!r} {p.stderr.read()!r}")
+    # Auto-inject the base sidecar so _peek/_who/_fig are available immediately.
+    base = _base_sidecar_src()
+    if base:
+        p.stdin.write(_common.encode_line({"id": "init", "code": base}))
+        p.stdin.flush()
+        p.stdout.readline()  # discard the init response
     return p
 
 
