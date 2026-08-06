@@ -48,3 +48,28 @@ async def test_restart_clears_state(monkeypatch, tmp_path):
         await client.call_tool("restart", {"session": "t3"})
         r = await client.call_tool("run_code", {"session": "t3", "code": "z"})
         assert r.structured_content["error"] is not None  # NameError after restart
+
+
+@pytest.mark.asyncio
+async def test_list_variables(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from python_repl_server import mcp
+    async with Client(mcp) as client:
+        await client.call_tool("run_code", {"session": "lv", "code": "a = 1; b = [1,2,3]"})
+        r = await client.call_tool("list_variables", {"session": "lv"})
+        names = [v["name"] for v in r.structured_content["variables"]]
+        assert "a" in names and "b" in names
+
+
+@pytest.mark.asyncio
+async def test_inject_sidecar(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from python_repl_server import mcp
+    sidecar = tmp_path / "k.py"
+    sidecar.write_text("def hello():\n    return 'injected'\n")
+    async with Client(mcp) as client:
+        await client.call_tool("inject", {"session": "inj", "path": str(sidecar)})
+        r = await client.call_tool("run_code", {"session": "inj", "code": "hello()"})
+        assert "injected" in r.structured_content["stdout"]

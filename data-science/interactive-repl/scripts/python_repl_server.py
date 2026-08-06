@@ -41,6 +41,42 @@ class Ack(BaseModel):
     message: str = ""
 
 
+class VarSummary(BaseModel):
+    name: str
+    type: str
+    size: str = ""
+    preview: str = ""
+    has_children: bool = False
+
+
+class VarList(BaseModel):
+    variables: list[VarSummary]
+
+
+class InspectResult(BaseModel):
+    name: str
+    repr: str
+    error: str | None = None
+
+
+# Code injected into the worker to list session variables as JSON.
+# Defines a tiny _sz helper (underscore-prefixed → filtered from its own listing),
+# then prints a JSON list of {name,type,size,preview,has_children} for non-underscore
+# globals. exec semantics (no auto-print) → explicit print().
+_LIST_VARS_CODE = (
+    "import json as _j\n"
+    "def _sz(v):\n"
+    "    try:\n"
+    "        return str(len(v))\n"
+    "    except Exception:\n"
+    "        return ''\n"
+    "print(_j.dumps([{'name': n, 'type': type(v).__name__, 'size': _sz(v), "
+    "'preview': repr(v)[:120], "
+    "'has_children': hasattr(v, '__len__') and not isinstance(v, (str, bytes))} "
+    "for n, v in sorted(globals().items()) if not n.startswith('_')]))"
+)
+
+
 def _start(session: str) -> subprocess.Popen:
     p = subprocess.Popen(
         [sys.executable, str(WORKER)],
@@ -127,6 +163,41 @@ def restart(session: str) -> Ack:
         except Exception:
             pass
     return Ack(ok=True, message=f"restarted session '{session}'")
+
+
+@mcp.tool()
+def list_variables(session: str) -> VarList:
+    """List variables in the session namespace with type/size/preview summaries."""
+    r = _call_worker(session, _LIST_VARS_CODE)
+    if r.get("error"):
+        return VarList(variables=[])
+    try:
+        parsed = json.loads(r["stdout"].strip().split("\n")[-1])
+        return VarList(variables=[VarSummary(**v) for v in parsed])
+    except Exception:
+        return VarList(variables=[])
+
+
+@mcp.tool()
+def inspect_variable(session: str, name: str, path: list = None) -> InspectResult:
+    """Inspect a variable's repr, optionally drilling by path (e.g. ['df','col'])."""
+    expr = name
+    if path:
+        for p in path:
+            expr += f"[{p!r}]"
+    r = _call_worker(session, f"print(repr({expr}))")
+    return InspectResult(name=name, repr=r.get("stdout", ""), error=r.get("error"))
+
+
+@mcp.tool()
+def inject(session: str, path: str) -> Ack:
+    """Exec a kernel.py sidecar into the session namespace — the extensibility
+    mechanism for other skills. The sidecar should be top-level definitions only
+    (lazy imports), no side-effect code at load."""
+    with open(path, "r") as f:
+        code = f.read()
+    r = _call_worker(session, code)
+    return Ack(ok=r.get("error") is None, message=r.get("error") or f"injected {path}")
 
 
 if __name__ == "__main__":
