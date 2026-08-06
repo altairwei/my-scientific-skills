@@ -26,8 +26,19 @@
       "source": "./",
       "strict": false,
       "skills": [
-        "./data-science/exploratory-data-analysis"
-      ]
+        "./data-science/exploratory-data-analysis",
+        "./data-science/interactive-repl"
+      ],
+      "mcpServers": {
+        "python-repl": {
+          "command": "uv",
+          "args": ["run", "${CLAUDE_PLUGIN_ROOT}/data-science/interactive-repl/scripts/python_repl_server.py"]
+        },
+        "r-repl": {
+          "command": "uv",
+          "args": ["run", "${CLAUDE_PLUGIN_ROOT}/data-science/interactive-repl/scripts/r_repl_server.py"]
+        }
+      }
     },
     {
       "name": "scientific-writing",
