@@ -19,9 +19,10 @@ uv run scripts/notebook_chunks.py analysis.qmd --chunk extract   # one chunk's c
 ## Run chunks (one call)
 
 `run_chunk(session, file, selector)` on the matching server parses, resolves, and runs each
-chunk in notebook order. `selector` = label (`extract`), index (`3`), range (`3-7`), or
-open range (`3-` = to end). Returns `{stdout, stderr, error, plots, ran, skipped,
-failed_chunk}`.
+chunk in notebook order. `selector` = label (`extract`), index (`3`), range (`3-7`), open
+range (`3-` = to end), run-above (`^extract` = chunks 1..extract — "Run All Above"), or
+run-from (`extract^` = chunks extract..end). Returns `{stdout, stderr, error, plots, ran,
+skipped, failed_chunk}`.
 
 - `ran` — chunks that executed (index/label/language).
 - `skipped` — chunks not run, with a reason: `eval=FALSE` or `language=<lang>, use <other>-repl`.

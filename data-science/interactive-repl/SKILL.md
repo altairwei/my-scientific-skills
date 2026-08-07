@@ -45,7 +45,7 @@ server: a `lmp` session on `python-repl` and on `r-repl` are independent.
 ## The tools (per server)
 
 - `run_code(session, code)` — run code; returns `{stdout, stderr, error, plots:[path], truncated, degraded}`. State persists.
-- `run_chunk(session, file, selector)` — run one chunk (or a range) from a `.Rmd`/`.qmd`/`.ipynb` notebook in the session. `selector` = label / index / `N-M` / `N-`. Routes by language; skips `eval=FALSE`. See `references/notebook-iteration.md`.
+- `run_chunk(session, file, selector)` — run one chunk (or a range) from a `.Rmd`/`.qmd`/`.ipynb` notebook in the session. `selector` = label / index / `N-M` / `N-` / `^label` (run 1..label) / `label^` (run label..end). Routes by language; skips `eval=FALSE`. See `references/notebook-iteration.md`.
 - `list_variables(session)` — variable summary (type/size/preview).
 - `inspect_variable(session, name, path?)` — drill into a DataFrame's columns / a list's elements.
 - `inject(session, path)` — exec a `kernel.py`/`kernel.R` sidecar into the namespace. Call once when another skill ships a sidecar.
