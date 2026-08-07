@@ -102,7 +102,8 @@ _LIST_VARS_CODE = (
     "print(_j.dumps([{'name': n, 'type': type(v).__name__, 'size': _sz(v), "
     "'preview': repr(v)[:120], "
     "'has_children': hasattr(v, '__len__') and not isinstance(v, (str, bytes))} "
-    "for n, v in sorted(globals().items()) if not n.startswith('_')]))"
+    "for n, v in sorted(globals().items()) "
+    "if not n.startswith('_') and n not in {'json','math','os','re','sys'}]))"
 )
 
 
@@ -194,6 +195,14 @@ def run_chunk(session: str, file: str, selector: str) -> RunChunkResult:
         selected = _chunk_parser.resolve_selector(chunks, selector)
     except ValueError as e:
         return RunChunkResult(stdout="", stderr="", error=str(e))
+
+    # Set the session cwd to the notebook's dir so relative paths in chunks resolve
+    # (pd.read_csv("data.csv"), open("helper.py") — relative to the notebook, not the
+    # server's launch dir).
+    nb_dir = str(Path(file).resolve().parent)
+    r = _call_worker(session, f"import os; os.chdir({nb_dir!r})")
+    if r.get("error"):
+        return RunChunkResult(stdout="", stderr="", error=f"os.chdir({nb_dir}) failed: {r['error']}")
 
     ran: list[ChunkRan] = []
     skipped: list[ChunkSkipped] = []

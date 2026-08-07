@@ -34,10 +34,14 @@ A `.qmd` or `.ipynb` can mix R and Python chunks. `run_chunk` on **r-repl** runs
 in `skipped` with a routing hint. For a mixed notebook, call `run_chunk` on each server:
 R chunks on `r-repl`, Python chunks on `python-repl`.
 
-## Pass absolute file paths
+## Paths: absolute `file`, chunk-relative everything else
 
-`run_chunk` runs in the server process, whose cwd may differ from yours. Pass an absolute
-`file` path — the same convention as `source()`/`read.csv()` in `SKILL.md`.
+`run_chunk`'s `file` arg must be absolute (the server's cwd may differ from yours). But
+`run_chunk` also sets the **session cwd to the notebook's dir** before running the chunks,
+so relative paths *inside* the chunks resolve relative to the notebook —
+`source("shared-config.R")`, `read.csv("data.csv")`, `readRenviron("../../.Renviron")`
+all work as they would in the GUI. (This is r-cell's `cd analysis/phenotypes` lesson.)
+Subsequent `run_code` calls inherit this cwd; use `setwd()` / `os.chdir()` to change it.
 
 ## Chunk options
 

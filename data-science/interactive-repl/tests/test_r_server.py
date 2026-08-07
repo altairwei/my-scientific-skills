@@ -99,3 +99,76 @@ async def test_r_run_chunk_stop_on_first_error(monkeypatch, tmp_path):
         assert sc["failed_chunk"]["index"] == 5
         assert [c["index"] for c in sc["ran"]] == [1, 2, 4]   # 3 skipped, 5 errored (not in ran)
         assert [c["index"] for c in sc["skipped"]] == [3]
+
+
+@pytest.mark.asyncio
+async def test_r_user_con_does_not_clobber_protocol(monkeypatch, tmp_path):
+    """P0 #1: user `con <- ...` must NOT kill the worker — protocol socket is in .repl."""
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from r_repl_server import mcp
+    async with Client(mcp) as client:
+        r = await client.call_tool("run_code", {"session": "con1", "code": 'con <- "userdata"; print(con)'})
+        assert r.structured_content["error"] is None
+        assert "userdata" in r.structured_content["stdout"]
+        # a subsequent call must still work — proves the protocol socket survived
+        r2 = await client.call_tool("run_code", {"session": "con1", "code": "1 + 1"})
+        assert r2.structured_content["error"] is None
+        assert "2" in r2.structured_content["stdout"]
+
+
+@pytest.mark.asyncio
+async def test_r_single_plot_returns_array(monkeypatch, tmp_path):
+    """P0 #2: a single ggplot must serialize plots as a 1-element array, not a scalar."""
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from r_repl_server import mcp
+    async with Client(mcp) as client:
+        r = await client.call_tool("run_code", {"session": "plot1", "code": "ggplot2::qplot(1:3, 4:6)"})
+        sc = r.structured_content
+        assert sc["error"] is None
+        assert isinstance(sc["plots"], list)
+        assert len(sc["plots"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_r_list_variables_excludes_protocol_state(monkeypatch, tmp_path):
+    """#4: protocol vars live in .repl/local(); ls(.GlobalEnv) lists user objects only."""
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from r_repl_server import mcp
+    async with Client(mcp) as client:
+        await client.call_tool("run_code", {"session": "lv2", "code": "x <- 1; y <- 2"})
+        r = await client.call_tool("list_variables", {"session": "lv2"})
+        names = [v["name"] for v in r.structured_content["variables"]]
+        assert "x" in names and "y" in names
+        for leaked in ("con", "port", "run_cell", "write_json", "req", "res", "rid", "line", "dt_table"):
+            assert leaked not in names, f"{leaked} leaked in list_variables"
+
+
+@pytest.mark.asyncio
+async def test_r_dt_table_fallback_after_rm(monkeypatch, tmp_path):
+    """#5: rm('dt_table') removes the user's; the worker's attached fallback still resolves."""
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from r_repl_server import mcp
+    async with Client(mcp) as client:
+        await client.call_tool("run_code", {"session": "dt1", "code": 'dt_table <- function() "user version"'})
+        r = await client.call_tool("run_code", {"session": "dt1", "code": "rm(dt_table); print(exists('dt_table', inherits=TRUE))"})
+        assert r.structured_content["error"] is None
+        assert "TRUE" in r.structured_content["stdout"]   # attached fallback found via search path
+
+
+@pytest.mark.asyncio
+async def test_r_run_chunk_sets_cwd_to_notebook_dir(monkeypatch, tmp_path):
+    """#3: run_chunk sets the session cwd to the notebook's dir so relative paths resolve."""
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from r_repl_server import mcp
+    nb = tmp_path / "cwd.Rmd"
+    nb.write_text('```{r}\nprint(getwd())\n```\n')
+    async with Client(mcp) as client:
+        r = await client.call_tool("run_chunk", {"session": "cwd1", "file": str(nb), "selector": "1"})
+        sc = r.structured_content
+        assert sc["error"] is None
+        assert str(tmp_path) in sc["stdout"]

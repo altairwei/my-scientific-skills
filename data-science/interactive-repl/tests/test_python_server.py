@@ -1,3 +1,4 @@
+import json
 import pathlib
 import pytest
 
@@ -141,3 +142,33 @@ async def test_run_chunk_stop_on_first_error(monkeypatch, tmp_path):
         assert sc["failed_chunk"]["index"] == 4
         assert [c["index"] for c in sc["ran"]] == [1, 3]       # 4 not run; 2 skipped
         assert [c["index"] for c in sc["skipped"]] == [2]
+
+
+@pytest.mark.asyncio
+async def test_run_chunk_sets_cwd_to_notebook_dir(monkeypatch, tmp_path):
+    """#3: run_chunk sets the session cwd to the notebook's dir so relative paths resolve."""
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from python_repl_server import mcp
+    nb = tmp_path / "cwd.ipynb"
+    nb.write_text(json.dumps({"cells": [{"cell_type": "code", "metadata": {}, "outputs": [], "source": ["import os; print(os.getcwd())\n"]}], "metadata": {"kernelspec": {"language": "python", "name": "python3"}}, "nbformat": 4, "nbformat_minor": 5}))
+    async with Client(mcp) as client:
+        r = await client.call_tool("run_chunk", {"session": "cwd1", "file": str(nb), "selector": "1"})
+        sc = r.structured_content
+        assert sc["error"] is None
+        assert str(tmp_path) in sc["stdout"]
+
+
+@pytest.mark.asyncio
+async def test_list_variables_excludes_preimported_stdlib(monkeypatch, tmp_path):
+    """#4 (Python): list_variables lists user objects, not the worker's pre-imported stdlib."""
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from python_repl_server import mcp
+    async with Client(mcp) as client:
+        await client.call_tool("run_code", {"session": "lv3", "code": "x = 1"})
+        r = await client.call_tool("list_variables", {"session": "lv3"})
+        names = [v["name"] for v in r.structured_content["variables"]]
+        assert "x" in names
+        for leaked in ("json", "math", "os", "re", "sys"):
+            assert leaked not in names, f"{leaked} leaked in list_variables"

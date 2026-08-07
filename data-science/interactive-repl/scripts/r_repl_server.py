@@ -212,6 +212,13 @@ def run_chunk(session: str, file: str, selector: str) -> RunChunkResult:
     except ValueError as e:
         return RunChunkResult(stdout="", stderr="", error=str(e))
 
+    # Set the session cwd to the notebook's dir so relative paths in chunks resolve
+    # (source("helper.R"), read.csv("data.csv") — r-cell's `cd analysis/phenotypes` lesson).
+    nb_dir = str(Path(file).resolve().parent)
+    r = _call_worker(session, f"setwd({nb_dir!r})")
+    if r.get("error"):
+        return RunChunkResult(stdout="", stderr="", error=f"setwd({nb_dir}) failed: {r['error']}")
+
     ran: list[ChunkRan] = []
     skipped: list[ChunkSkipped] = []
     out_parts: list[str] = []
