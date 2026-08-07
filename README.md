@@ -21,7 +21,7 @@ Skills for data analysis, statistics, and visualization.
 | Skill | Description |
 |-------|-------------|
 | [exploratory-data-analysis](data-science/exploratory-data-analysis/) | Guides Claude through a structured exploratory data analysis of a tabular dataset |
-| [interactive-repl](data-science/interactive-repl/) | Persistent R/Python REPL via two MCP servers (python-repl, r-repl) — iterate in-session instead of re-running scripts; auto plot capture, variable inspection, sidecar injection |
+| [interactive-repl](data-science/interactive-repl/) | Persistent R/Python REPL via two MCP servers (python-repl, r-repl) — iterate in-session instead of re-running scripts; auto plot capture, variable inspection, sidecar injection; HPC/Slurm compute-node sessions |
 
 ### scientific-writing
 
@@ -78,7 +78,7 @@ Once installed, Claude will automatically activate relevant skills based on your
 
 Skills are grouped into topical categories, each of which is a plugin registered in [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json).
 
-The `interactive-repl` skill is the first to bundle MCP servers (declared inline via `mcpServers` on the `data-science` plugin entry, auto-started when that plugin is enabled). It is Claude-Code-specific; the other skills remain tool-agnostic and portable across agent platforms.
+The `interactive-repl` skill is the first to bundle MCP servers (declared inline via `mcpServers` on the `data-science` plugin entry, auto-started when that plugin is enabled). It is Claude-Code-specific; the other skills remain tool-agnostic and portable across agent platforms. Its workers can also run on Slurm compute nodes (srun + callback transport) for HPC centers.
 
 ## Contributing
 

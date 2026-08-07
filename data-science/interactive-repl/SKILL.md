@@ -50,7 +50,8 @@ server: a `lmp` session on `python-repl` and on `r-repl` are independent.
 - `inspect_variable(session, name, path?)` — drill into a DataFrame's columns / a list's elements.
 - `inject(session, path)` — exec a `kernel.py`/`kernel.R` sidecar into the namespace. Call once when another skill ships a sidecar.
 - `restart(session)` — wipe + respawn the worker. **Rarely** — only after a crash or to deliberately reset (loses DB connections + loaded data).
-- `session_info(session)` — versions, loaded packages, working dir, variable count.
+- `session_info(session)` — versions, loaded packages, working dir, variable count, and (slurm mode) compute-node job id / node / transport.
+- `worker_mode(mode?, slurm_flags?, transport?)` — probe or switch how workers launch: `local` (default) vs `slurm` (srun on a compute node). Call it with no args to detect the environment; switch for HPC work. See `references/slurm-hpc.md`.
 
 ## Plots — save and look (necessary, not sufficient)
 
@@ -80,6 +81,17 @@ turns. Use distinct names for parallel tasks (`lmp`, `splitqc`, …).
 After a crash (`run_code` returns "worker died") → `restart(session)`, or to deliberately
 reset. **Do not restart between chunks "to be safe"** — restart-cycles lose DB
 connections and loaded data.
+
+## HPC / Slurm — compute nodes
+
+On supercomputing clusters, heavy compute must run on a compute node, not the
+login node. `worker_mode()` on the server probes the environment
+(`srun_available`, `already_in_allocation`, `ssh_available`) and switches
+between `local` and `slurm` launch — call it before heavy work when the user
+mentions clusters/queues/partitions. Slurm sessions are tied to the
+allocation: expiry surfaces as `worker died` → `restart` resubmits (fresh
+namespace). Requires shared storage for plots (`CLAUDE_PLUGIN_DATA`) — see
+`references/slurm-hpc.md`.
 
 ## Ad-hoc inspection is first-class
 
@@ -112,4 +124,5 @@ Read on demand: `references/tools.md` (full API), `references/sidecar-authoring.
 (how to write a sidecar for your skill), `references/r-setup.md` (conda env,
 neutralized functions), `references/troubleshooting.md` (stuck code, missing deps,
 worker crashes), `references/plot-iteration.md` (save-and-look, expanded),
-`references/notebook-iteration.md` (`.Rmd`/`.qmd`/`.ipynb` chunk list + run).
+`references/notebook-iteration.md` (`.Rmd`/`.qmd`/`.ipynb` chunk list + run),
+`references/slurm-hpc.md` (HPC: run workers on compute nodes via srun).

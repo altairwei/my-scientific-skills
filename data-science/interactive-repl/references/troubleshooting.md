@@ -59,3 +59,14 @@ big data frames survive compaction (this is a key advantage over one-shot script
 
 Don't restart between chunks "to be safe" — each `restart` wipes DB connections and
 loaded data. Only restart after a crash or to deliberately reset for a fresh analysis.
+
+## Slurm / HPC
+
+- `srun allocation did not start within Ns` — flags wrong (bad partition/account)
+  or the queue is busy. Check `squeue`, fix `INTERACTIVE_REPL_SLURM`, retry.
+- `worker died` after a slurm session started — the allocation expired or was
+  preempted; `restart(session)` resubmits (fresh namespace — re-run the setup).
+- Tunnel mode fails at session start — ssh from the compute node to the login
+  node must be passwordless (`ssh login-node` with no prompt).
+- Plots from a compute-node session are missing — `CLAUDE_PLUGIN_DATA` points
+  at per-node storage; export it to shared storage (see `slurm-hpc.md`).
