@@ -38,7 +38,7 @@ def main() -> int:
     ap.add_argument("file")
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--json", action="store_true", help="full chunk descriptors as JSON")
-    g.add_argument("--chunk", help="print one chunk's code (label or 1-based index)")
+    g.add_argument("--chunk", help="print the selected chunk's code (label, index, or range-like selector)")
     g.add_argument("--chunks", help="print concatenated code for a range (N-M or N-)")
     args = ap.parse_args()
 
@@ -57,7 +57,7 @@ def main() -> int:
         except ValueError as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
-        print(sel[0].code)
+        print("\n".join(c.code for c in sel))
     elif args.chunks:
         try:
             sel = _chunk_parser.resolve_selector(chunks, args.chunks)

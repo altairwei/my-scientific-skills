@@ -63,3 +63,17 @@ def test_cli_missing_file_exits_nonzero():
     r = _run("/nonexistent.ipynb")
     assert r.returncode == 1
     assert "error" in r.stderr.lower()
+
+
+def test_cli_chunks_run_above_prints_range():
+    r = _run(str(RMD), "--chunks", "^load-data")
+    assert r.returncode == 0
+    assert "x <- 1" in r.stdout                # chunk 1 (setup)
+    assert "df <- data.frame" in r.stdout      # chunk 2 (load-data)
+
+
+def test_cli_chunk_run_above_prints_full_range():
+    r = _run(str(RMD), "--chunk", "^load-data")
+    assert r.returncode == 0
+    assert "x <- 1" in r.stdout                # chunk 1
+    assert "df <- data.frame" in r.stdout      # chunk 2 — the fix (was: only sel[0])
