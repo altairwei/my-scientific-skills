@@ -164,8 +164,22 @@ def main():
     port = os.environ.get("REPL_PORT")
     if port:
         import socket as _sock
+        import _slurm
         host = os.environ.get("REPL_HOST", "localhost")
-        conn = _sock.create_connection((host, int(port)), timeout=30)
+        if os.environ.get("REPL_TRANSPORT") == "tunnel":
+            # ssh -fN -L <L>:localhost:<port> forwards the server's listener
+            # to this node; pick a free local port first. The foreground ssh
+            # exits 0 once the tunnel is up (check=True) — non-zero means
+            # bind collision / auth failure → fail fast.
+            s = _sock.socket()
+            s.bind(("127.0.0.1", 0))
+            local_port = s.getsockname()[1]
+            s.close()
+            subprocess.run(_slurm.tunnel_cmd(local_port, host, int(port)),
+                           check=True, timeout=30)
+            conn = _sock.create_connection(("127.0.0.1", local_port), timeout=30)
+        else:
+            conn = _sock.create_connection((host, int(port)), timeout=30)
         protocol_in = conn.makefile("r", encoding="utf-8", errors="replace")
         protocol_out = conn.makefile("w", encoding="utf-8", buffering=1)
     else:

@@ -266,3 +266,100 @@ async def test_slurm_r_restart_scancels(monkeypatch, tmp_path):
         assert "4242" in (tmp_path / "scancel.log").read_text()
         r2 = await client.call_tool("run_code", {"session": "slr2", "code": "x"})
         assert r2.structured_content["error"] is not None  # object not found after restart
+
+
+FAKE_SSH = textwrap.dedent("""\
+    #!/usr/bin/env python3
+    # Fake `ssh` for tests: emulate `-fN -L L:localhost:P host` by forking a
+    # proxy (listen on L, forward to localhost:P) and exiting 0. The child
+    # exits when the single proxied connection closes.
+    import os, socket, select, sys
+
+    _log = os.environ.get("FAKE_SSH_LOG")
+    if _log:
+        with open(_log, "a") as f:
+            f.write("ssh " + " ".join(sys.argv[1:]) + "\\n")
+
+    args = sys.argv[1:]
+    local = remote = None
+    for i, a in enumerate(args):
+        if a == "-L":
+            spec = args[i + 1]  # "L:localhost:P"
+            local = int(spec.split(":")[0])
+            remote = int(spec.split(":")[2])
+
+    def proxy():
+        srv = socket.socket()
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        srv.bind(("127.0.0.1", local))
+        srv.listen(1)
+        conn, _ = srv.accept()          # the worker's connection
+        up = socket.create_connection(("127.0.0.1", remote), timeout=10)
+        conn.setblocking(False)
+        up.setblocking(False)
+        while True:
+            r, _, _ = select.select([conn, up], [], [], 1.0)
+            if not r:
+                continue
+            for src in r:
+                dst = up if src is conn else conn
+                try:
+                    data = src.recv(65536)
+                except BlockingIOError:
+                    continue
+                if not data:
+                    return
+                dst.sendall(data)
+
+    if os.fork() == 0:                  # child keeps proxying
+        try:
+            proxy()
+        finally:
+            os._exit(0)
+    os._exit(0)                         # parent: tunnel "up", exit 0
+    """)
+
+
+@pytest.mark.asyncio
+async def test_tunnel_python_end_to_end(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    monkeypatch.setenv("INTERACTIVE_REPL_SLURM", "-c 4")
+    monkeypatch.setenv("INTERACTIVE_REPL_TRANSPORT", "tunnel")
+    monkeypatch.setenv("INTERACTIVE_REPL_HOST", "127.0.0.1")
+    _install_shims(tmp_path, monkeypatch, names=("srun", "scancel", "ssh"))
+    (tmp_path / "ssh").write_text(FAKE_SSH)
+    (tmp_path / "ssh").chmod(0o755)
+    from mcp import Client
+    from python_repl_server import mcp
+    async with Client(mcp) as client:
+        r = await client.call_tool("run_code", {"session": "tun1", "code": "1 + 1"})
+        sc = r.structured_content
+        assert sc["error"] is None
+        assert "2" in sc["stdout"]
+        si = (await client.call_tool("session_info", {"session": "tun1"})).structured_content
+        assert si["transport"] == "tunnel"
+        assert si["job_id"] == "4242"
+        # the tunnel must actually be used — the naive worker would connect
+        # directly to 127.0.0.1:<port> and silently skip the ssh forwarding
+        assert "-L" in (tmp_path / "ssh.log").read_text()
+
+
+@pytest.mark.asyncio
+async def test_tunnel_r_end_to_end(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    monkeypatch.setenv("INTERACTIVE_REPL_SLURM", "-c 4")
+    monkeypatch.setenv("INTERACTIVE_REPL_TRANSPORT", "tunnel")
+    monkeypatch.setenv("INTERACTIVE_REPL_HOST", "127.0.0.1")
+    _install_shims(tmp_path, monkeypatch, names=("srun", "scancel", "ssh"))
+    (tmp_path / "ssh").write_text(FAKE_SSH)
+    (tmp_path / "ssh").chmod(0o755)
+    from mcp import Client
+    from r_repl_server import mcp
+    async with Client(mcp) as client:
+        r = await client.call_tool("run_code", {"session": "tun2", "code": "1 + 1"})
+        sc = r.structured_content
+        assert sc["error"] is None
+        assert "2" in sc["stdout"]
+        si = (await client.call_tool("session_info", {"session": "tun2"})).structured_content
+        assert si["transport"] == "tunnel"
+        assert "-L" in (tmp_path / "ssh.log").read_text()

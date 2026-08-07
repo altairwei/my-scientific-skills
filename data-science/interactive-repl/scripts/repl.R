@@ -27,8 +27,45 @@ if (is.na(.repl$port) || .repl$port <= 0) stop("REPL_PORT env var must be set to
 # across the interconnect; the tunnel branch (REPL_TRANSPORT=tunnel) is
 # implemented in the same place — see the `if` below.
 .repl$host <- Sys.getenv("REPL_HOST", "localhost")
-.repl$con <- socketConnection(host = .repl$host, port = .repl$port, server = FALSE,
-                              blocking = TRUE, open = "r+b", timeout = 86400L)
+.repl$con <- NULL
+if (identical(Sys.getenv("REPL_TRANSPORT"), "tunnel")) {
+  # Tunnel mode: ssh -fN -L <L>:localhost:<port> <host> forwards the server's
+  # listener to this (compute) node. Base R cannot read an OS-assigned
+  # port=0, so probe a random high port; system2(wait=TRUE) returns the ssh
+  # exit status — with -f the foreground exits quickly either way, so 0 means
+  # the tunnel is up (bind collision / auth failure → non-zero → retry).
+  for (i in 1:5) {
+    L <- 20000 + sample(20000, 1)
+    # Probe with a CLIENT connection, not server=TRUE (R's server sockets
+    # fail on some builds — "problem in listening on this socket"): a
+    # connection to a free port is refused (error → free); one to a taken
+    # port succeeds (→ taken). The tiny probe/ssh-bind race is covered by
+    # ssh's ExitOnForwardFailure and the retry loop.
+    probe <- tryCatch({
+      c <- suppressWarnings(socketConnection(host = "localhost", port = L,
+                                             server = FALSE, blocking = TRUE,
+                                             open = "r+b", timeout = 2))
+      close(c)
+      FALSE
+    }, error = function(e) TRUE)
+    if (!probe) next
+    st <- system2("ssh", c("-fN", "-L", sprintf("%d:localhost:%d", L, .repl$port),
+                           .repl$host, "-o", "BatchMode=yes",
+                           "-o", "ExitOnForwardFailure=yes",
+                           "-o", "ServerAliveInterval=30",
+                           "-o", "ConnectTimeout=10"), wait = TRUE)
+    if (st != 0) next
+    .repl$con <- socketConnection(host = "localhost", port = L, server = FALSE,
+                                  blocking = TRUE, open = "r+b", timeout = 86400L)
+    break
+  }
+  if (is.null(.repl$con)) {
+    stop("ssh -L tunnel to ", .repl$host, " failed (check passwordless ssh)")
+  }
+} else {
+  .repl$con <- socketConnection(host = .repl$host, port = .repl$port, server = FALSE,
+                                blocking = TRUE, open = "r+b", timeout = 86400L)
+}
 on.exit(close(.repl$con))
 options(width = 400)  # wide so captured R lines don't wrap in the response
 
