@@ -169,8 +169,9 @@ worker_mode(mode?, slurm_flags?, transport?) → WorkerModeInfo
 
 - **With args = runtime switch** (this server process only; server restart
   falls back to env defaults): `mode="local"|"slurm"`;
-  `slurm_flags` overrides env (empty string = keep env); `transport`
-  overrides `direct`/`tunnel`. **Precedence: tool > env > built-in default.**
+  `slurm_flags` overrides env (omitted or empty string = keep env);
+  `transport` overrides `direct`/`tunnel` (omitted = keep env).
+  **Precedence: tool > env > built-in default.**
 - Switching affects only sessions created **after** the switch; existing
   sessions keep running under their launch-time mode until `restart`.
 
