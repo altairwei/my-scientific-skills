@@ -45,6 +45,7 @@ server: a `lmp` session on `python-repl` and on `r-repl` are independent.
 ## The tools (per server)
 
 - `run_code(session, code)` — run code; returns `{stdout, stderr, error, plots:[path], truncated, degraded}`. State persists.
+- `run_chunk(session, file, selector)` — run one chunk (or a range) from a `.Rmd`/`.qmd`/`.ipynb` notebook in the session. `selector` = label / index / `N-M` / `N-`. Routes by language; skips `eval=FALSE`. See `references/notebook-iteration.md`.
 - `list_variables(session)` — variable summary (type/size/preview).
 - `inspect_variable(session, name, path?)` — drill into a DataFrame's columns / a list's elements.
 - `inject(session, path)` — exec a `kernel.py`/`kernel.R` sidecar into the namespace. Call once when another skill ships a sidecar.
@@ -83,8 +84,15 @@ connections and loaded data.
 ## Ad-hoc inspection is first-class
 
 `run_code` runs any code; use it freely for quick peeks (`_peek(df)`, `dim(df)`,
-`head(df)`). For notebook/qmd workflows, extract a chunk's code (read the chunk body or
-`knitr::purl`) and pass it to `run_code`.
+`head(df)`).
+
+## Notebooks (.Rmd / .qmd / .ipynb)
+
+For notebook workflows, don't hand-extract chunks — use the chunk tools. List chunks with
+`notebook_chunks.py FILE` (no session), then `run_chunk(session, FILE, selector)` to run one
+or a range in dependency order. Routes each chunk to the matching server by language (R →
+`r-repl`, Python → `python-repl`); `eval=FALSE` chunks are skipped. Read-only on the file —
+outputs to disk + `Read`. See `references/notebook-iteration.md` for the full workflow.
 
 ## Survives compaction
 
@@ -103,4 +111,5 @@ before using its helpers. The base sidecar (`_peek`/`_who`/`_fig` in Python,
 Read on demand: `references/tools.md` (full API), `references/sidecar-authoring.md`
 (how to write a sidecar for your skill), `references/r-setup.md` (conda env,
 neutralized functions), `references/troubleshooting.md` (stuck code, missing deps,
-worker crashes), `references/plot-iteration.md` (save-and-look, expanded).
+worker crashes), `references/plot-iteration.md` (save-and-look, expanded),
+`references/notebook-iteration.md` (`.Rmd`/`.qmd`/`.ipynb` chunk list + run).
