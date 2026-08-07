@@ -38,6 +38,16 @@ defined).
   no further `pip install` is needed.
 - R / `jsonlite` missing → see `r-setup.md`.
 
+## First `import pandas` / `matplotlib` is slow (one-time, then cached)
+
+The `python-repl` server starts with only `mcp`+`pydantic` installed (so MCP startup
+stays fast and never times out). The heavy data-science deps (`numpy`, `matplotlib`,
+`pandas`) are fetched **on first import** by the worker into a persistent
+`${CLAUDE_PLUGIN_DATA}/py-site` dir via `uv pip install --target` (reuses `uv`'s wheel
+cache). So the first `import pandas` in a session takes a few seconds (one-time); after
+that it's instant, and later sessions reuse `py-site`. Only packages you actually import
+are fetched — no plotting, no `matplotlib`.
+
 ## Context compaction mid-analysis
 
 If your context window is compacted, the REPL state is **not** lost — it lives in the
