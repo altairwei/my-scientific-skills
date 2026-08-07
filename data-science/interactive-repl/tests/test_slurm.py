@@ -108,3 +108,124 @@ def test_probe_fields(monkeypatch, tmp_path):
     assert p["already_in_allocation"] is False
     monkeypatch.setenv("SLURM_JOB_ID", "1234")
     assert _slurm.probe()["already_in_allocation"] is True
+
+
+# ---------------------------------------------------------------------------
+# Slurm integration tests — fake srun / scancel / ssh shims on a temp PATH
+# ---------------------------------------------------------------------------
+
+import textwrap
+
+SCRIPTS = pathlib.Path(__file__).resolve().parent.parent / "scripts"
+
+FAKE_SRUN = textwrap.dedent("""\
+    #!/bin/sh
+    # Real srun consumes its own flags and runs the remaining argv as the job
+    # command — strip leading srun flags (attached or space-separated values)
+    # so `exec "$@"` runs just the worker command.
+    echo "srun $*" >> "$FAKE_SRUN_LOG"
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        -*)
+          shift
+          if [ $# -gt 0 ]; then
+            case "$1" in
+              -*) ;;
+              *) shift ;;
+            esac
+          fi
+          ;;
+        *) break ;;
+      esac
+    done
+    export SLURM_JOB_ID=4242
+    export SLURM_JOB_NODELIST=cn042
+    exec "$@"
+    """)
+
+FAKE_SCANCEL = textwrap.dedent("""\
+    #!/bin/sh
+    echo "scancel $*" >> "$FAKE_SCANCEL_LOG"
+    exit 0
+    """)
+
+
+def _install_shims(tmp_path, monkeypatch, names=("srun", "scancel")):
+    """Write fake srun/scancel shims to tmp_path, put them on PATH, and point
+    their log env vars at log files. srun records argv, injects SLURM_* env,
+    and execs the real worker command; scancel records its args."""
+    for name in names:
+        body = FAKE_SRUN if name == "srun" else FAKE_SCANCEL
+        shim = tmp_path / name
+        shim.write_text(body)
+        shim.chmod(0o755)
+        monkeypatch.setenv(f"FAKE_{name.upper()}_LOG", str(tmp_path / f"{name}.log"))
+    monkeypatch.setenv("PATH", str(tmp_path) + os.pathsep + os.environ["PATH"])
+
+
+@pytest.mark.asyncio
+async def test_slurm_python_end_to_end(monkeypatch, tmp_path):
+    """INTERACTIVE_REPL_SLURM set + fake srun on PATH → sessions launch via
+    srun, worker connects back, session_info reports the SLURM job."""
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    monkeypatch.setenv("INTERACTIVE_REPL_SLURM", "--partition=test -c 4")
+    monkeypatch.setenv("INTERACTIVE_REPL_HOST", "127.0.0.1")  # loopback in tests
+    _install_shims(tmp_path, monkeypatch)
+    from mcp import Client
+    from python_repl_server import mcp
+    async with Client(mcp) as client:
+        r = await client.call_tool("run_code", {"session": "slp1", "code": "1 + 1"})
+        sc = r.structured_content
+        assert sc["error"] is None
+        assert "2" in sc["stdout"]
+        si = (await client.call_tool("session_info", {"session": "slp1"})).structured_content
+        assert si["job_id"] == "4242"
+        assert si["node"] == "cn042"
+        assert si["transport"] == "direct"
+        assert si["running"] is True
+        log = (tmp_path / "srun.log").read_text()
+        assert "--partition=test -c 4" in log
+
+
+@pytest.mark.asyncio
+async def test_slurm_python_restart_scancels(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    monkeypatch.setenv("INTERACTIVE_REPL_SLURM", "-c 4")
+    monkeypatch.setenv("INTERACTIVE_REPL_HOST", "127.0.0.1")
+    _install_shims(tmp_path, monkeypatch)
+    from mcp import Client
+    from python_repl_server import mcp
+    async with Client(mcp) as client:
+        await client.call_tool("run_code", {"session": "slp2", "code": "x = 1"})
+        r = await client.call_tool("restart", {"session": "slp2"})
+        assert r.structured_content["ok"] is True
+        assert "4242" in (tmp_path / "scancel.log").read_text()
+        # session restarted: namespace wiped, new session works
+        r2 = await client.call_tool("run_code", {"session": "slp2", "code": "x"})
+        assert r2.structured_content["error"] is not None  # NameError after restart
+
+
+@pytest.mark.asyncio
+async def test_slurm_python_token_mismatch_rejected(monkeypatch, tmp_path):
+    """A worker that returns the wrong token must be refused (shared login
+    node: an open port is an injection risk)."""
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    monkeypatch.setenv("INTERACTIVE_REPL_SLURM", "-c 4")
+    monkeypatch.setenv("INTERACTIVE_REPL_HOST", "127.0.0.1")
+    _install_shims(tmp_path, monkeypatch)
+    wrong = tmp_path / "srun"
+    # inject the wrong token before the FINAL exec "$@" line so it reaches the
+    # worker (a line appended after exec would be dead code). rsplit targets
+    # only the last occurrence — str.replace would also mangle the backtick
+    # comment in FAKE_SRUN and break the shim's shell syntax.
+    head, _, _ = FAKE_SRUN.rpartition('exec "$@"')
+    wrong.write_text(head + 'export REPL_TOKEN=wrongtoken\nexec "$@"\n')
+    wrong.chmod(0o755)
+    from mcp import Client
+    from python_repl_server import mcp
+    async with Client(mcp) as client:
+        # session-start failures are structured errors, not tool-level failures
+        r = await client.call_tool("run_code", {"session": "slp3", "code": "1"})
+        sc = r.structured_content
+        assert sc["error"] is not None
+        assert "token mismatch" in sc["error"]

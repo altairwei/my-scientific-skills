@@ -16,9 +16,25 @@ WORKER = HERE / "python_worker.py"
 sys.path.insert(0, str(HERE))
 import _common  # noqa: E402
 import _chunk_parser  # noqa: E402
+import _slurm  # noqa: E402
 
 mcp = MCPServer("python-repl")
-_sessions: dict[str, subprocess.Popen] = {}
+
+
+class _Session:
+    """One worker. Local mode: proc pipes carry the protocol. Slurm mode:
+    conn is the accepted TCP socket; job_id/node/transport come from the
+    worker's ready handshake (SLURM_JOB_ID / SLURM_JOB_NODELIST)."""
+
+    def __init__(self, proc, conn=None, job_id=None, node=None, transport="local"):
+        self.proc = proc
+        self.conn = conn
+        self.job_id = job_id
+        self.node = node
+        self.transport = transport
+
+
+_sessions: dict[str, _Session] = {}
 
 
 class RunResult(BaseModel):
@@ -63,6 +79,9 @@ class SessionInfo(BaseModel):
     running: bool
     pid: int | None = None
     plot_dir: str = ""
+    job_id: str | None = None
+    node: str | None = None
+    transport: str = "local"
 
 
 class Ack(BaseModel):
@@ -113,46 +132,75 @@ def _base_sidecar_src() -> str:
     return p.read_text() if p.exists() else ""
 
 
-def _start(session: str) -> subprocess.Popen:
-    p = subprocess.Popen(
-        [sys.executable, str(WORKER)],
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        text=True, bufsize=1,
-    )
-    ready = json.loads(p.stdout.readline())
-    if not ready.get("ready"):
-        raise RuntimeError(f"worker failed to start: {ready!r} {p.stderr.read()!r}")
+def _send(s: _Session, line: str) -> None:
+    if s.conn is not None:
+        s.conn.sendall(line.encode())
+    else:
+        s.proc.stdin.write(line)
+        s.proc.stdin.flush()
+
+
+def _recv(s: _Session) -> str:
+    if s.conn is not None:
+        buf = b""
+        while not buf.endswith(b"\n"):
+            chunk = s.conn.recv(65536)
+            if not chunk:
+                raise OSError("connection closed")
+            buf += chunk
+        return buf.decode()
+    line = s.proc.stdout.readline()
+    if not line:
+        raise OSError("pipe closed")
+    return line
+
+
+def _start(session: str) -> _Session:
+    if _slurm.slurm_enabled():
+        proc, conn, meta = _slurm.launch_remote([sys.executable, str(WORKER)])
+        s = _Session(proc, conn, meta["job_id"], meta["node"], meta["transport"])
+    else:
+        p = subprocess.Popen(
+            [sys.executable, str(WORKER)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, bufsize=1,
+        )
+        ready = json.loads(p.stdout.readline())
+        if not ready.get("ready"):
+            raise RuntimeError(f"worker failed to start: {ready!r} {p.stderr.read()!r}")
+        s = _Session(p)
     # Auto-inject the base sidecar so _peek/_who/_fig are available immediately.
     base = _base_sidecar_src()
     if base:
-        p.stdin.write(_common.encode_line({"id": "init", "code": base}))
-        p.stdin.flush()
-        p.stdout.readline()  # discard the init response
-    return p
+        _send(s, _common.encode_line({"id": "init", "code": base}))
+        _recv(s)  # discard the init response
+    return s
 
 
-def _get(session: str) -> subprocess.Popen:
-    p = _sessions.get(session)
-    if p is None or p.poll() is not None:
-        p = _start(session)
-        _sessions[session] = p
-    return p
+def _get(session: str) -> _Session:
+    s = _sessions.get(session)
+    if s is None or s.proc.poll() is not None:
+        s = _start(session)
+        _sessions[session] = s
+    return s
 
 
 def _call_worker(session: str, code: str) -> dict:
-    p = _get(session)
     rid = uuid.uuid4().hex
     try:
-        p.stdin.write(_common.encode_line({"id": rid, "code": code}))
-        p.stdin.flush()
-        line = p.stdout.readline()
+        s = _get(session)
+        _send(s, _common.encode_line({"id": rid, "code": code}))
+        line = _recv(s)
     except (BrokenPipeError, OSError) as e:
         _sessions.pop(session, None)
         return {"stdout": "", "stderr": "", "error": f"worker died: {e}",
                 "plots": [], "truncated": False, "degraded": False}
-    if not line:
+    except RuntimeError as e:
+        # session-start failures (queue timeout, token mismatch, worker refused
+        # to start) surface as structured errors — raising here hangs the MCP
+        # request in the in-process client (exceptions are not auto-converted).
         _sessions.pop(session, None)
-        return {"stdout": "", "stderr": "", "error": "worker died (no output)",
+        return {"stdout": "", "stderr": "", "error": str(e),
                 "plots": [], "truncated": False, "degraded": False}
     return _common.decode_line(line)
 
@@ -244,26 +292,40 @@ def run_chunk(session: str, file: str, selector: str) -> RunChunkResult:
 
 @mcp.tool()
 def session_info(session: str) -> SessionInfo:
-    """Report whether the named session is running, its pid, and the plot dir."""
-    p = _sessions.get(session)
-    running = p is not None and p.poll() is None
+    """Report whether the named session is running, its pid, the plot dir, and
+    (slurm mode) the compute-node job id / node / transport."""
+    s = _sessions.get(session)
+    running = s is not None and s.proc.poll() is None
     return SessionInfo(session=session, running=running,
-                       pid=p.pid if running else None, plot_dir=_common.plot_dir())
+                       pid=s.proc.pid if running else None,
+                       plot_dir=_common.plot_dir(),
+                       job_id=s.job_id if running else None,
+                       node=s.node if running else None,
+                       transport=s.transport if running else None)
 
 
 @mcp.tool()
 def restart(session: str) -> Ack:
     """Kill and respawn the named session's worker — wipes the namespace.
-    Use after a worker crash or to deliberately reset state. Loses DB
-    connections and loaded data, so use sparingly."""
-    p = _sessions.pop(session, None)
-    if p is not None:
+    In slurm mode this scancels the allocation and resubmits under the
+    current worker mode. Use after a worker crash or to deliberately reset
+    state. Loses DB connections and loaded data, so use sparingly."""
+    s = _sessions.pop(session, None)
+    if s is not None:
+        if s.job_id:
+            try:
+                subprocess.run(["scancel", s.job_id], timeout=10, capture_output=True)
+            except Exception:
+                pass
         try:
-            p.stdin.close()
+            if s.conn is not None:
+                s.conn.close()
+            else:
+                s.proc.stdin.close()
         except Exception:
             pass
         try:
-            p.terminate(); p.wait(timeout=2)
+            s.proc.terminate(); s.proc.wait(timeout=2)
         except Exception:
             pass
     return Ack(ok=True, message=f"restarted session '{session}'")
