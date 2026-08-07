@@ -137,13 +137,20 @@ def _opt_bool(val: str | None, default: bool) -> bool:
     return val.strip().lower() not in ("false", "f", "0", "no")
 
 
+def _not_found_msg(chunks: list[Chunk], selector: str) -> str:
+    labels = ", ".join(c.label for c in chunks)
+    return (f"chunk '{selector}' not found. Available: {labels} "
+            f"(indices 1-{len(chunks)})")
+
+
 def resolve_selector(chunks: list[Chunk], selector: str) -> list[Chunk]:
     """Resolve a selector to an ordered list of chunks.
 
-    Order of resolution: range (`N-M` or `N-`) → index (`N`) → label. Numeric
-    selectors take precedence over label — a chunk labelled purely with digits is
-    pathological. Raises ValueError on out-of-bounds or no match (with available
-    labels in the message).
+    Order of resolution: range (`N-M` or `N-`) → index (`N`) → run-above (`^label`,
+    1..label inclusive) → run-from (`label^`, label..end inclusive) → exact label.
+    Numeric selectors take precedence over label; caret forms take precedence over
+    label — labels containing `^` are pathological. Raises ValueError on out-of-bounds
+    or no match (with available labels in the message).
     """
     if re.fullmatch(r"\d+-\d*", selector):
         a, _, b = selector.partition("-")
@@ -157,9 +164,21 @@ def resolve_selector(chunks: list[Chunk], selector: str) -> list[Chunk]:
         if idx < 1 or idx > len(chunks):
             raise ValueError(f"index {idx} out of bounds (1-{len(chunks)})")
         return [chunks[idx - 1]]
+    m = re.fullmatch(r"\^(.+)", selector)
+    if m:
+        label = m.group(1)
+        for i, c in enumerate(chunks, 1):
+            if c.label == label:
+                return chunks[:i]   # 1..label inclusive — Run Above
+        raise ValueError(_not_found_msg(chunks, label))
+    m = re.fullmatch(r"(.+)\^", selector)
+    if m:
+        label = m.group(1)
+        for i, c in enumerate(chunks, 1):
+            if c.label == label:
+                return chunks[i - 1:]   # label..end inclusive — Run From
+        raise ValueError(_not_found_msg(chunks, label))
     matches = [c for c in chunks if c.label == selector]
     if not matches:
-        labels = ", ".join(c.label for c in chunks)
-        raise ValueError(
-            f"chunk '{selector}' not found. Available: {labels} (indices 1-{len(chunks)})")
+        raise ValueError(_not_found_msg(chunks, selector))
     return matches

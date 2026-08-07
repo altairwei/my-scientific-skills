@@ -142,3 +142,34 @@ def test_resolve_selector_out_of_bounds_raises():
 def test_resolve_selector_not_found_raises():
     with pytest.raises(ValueError, match="not found"):
         _chunk_parser.resolve_selector(_chunks(), "nope")
+
+
+# ---- Run Above / Run From caret selectors ----
+def test_resolve_selector_run_above_inclusive():
+    rmd = _chunk_parser.parse_notebook(str(RMD))
+    sel = _chunk_parser.resolve_selector(rmd, "^load-data")
+    assert [c.index for c in sel] == [1, 2]        # setup..load-data inclusive
+
+
+def test_resolve_selector_run_from_inclusive():
+    rmd = _chunk_parser.parse_notebook(str(RMD))
+    sel = _chunk_parser.resolve_selector(rmd, "load-data^")
+    assert [c.index for c in sel] == [2, 3, 4, 5]  # load-data..end inclusive
+
+
+def test_resolve_selector_run_above_to_last_is_all():
+    rmd = _chunk_parser.parse_notebook(str(RMD))
+    assert [c.index for c in _chunk_parser.resolve_selector(rmd, "^boom")] == [1, 2, 3, 4, 5]
+
+
+def test_resolve_selector_run_from_first_is_all():
+    rmd = _chunk_parser.parse_notebook(str(RMD))
+    assert [c.index for c in _chunk_parser.resolve_selector(rmd, "setup^")] == [1, 2, 3, 4, 5]
+
+
+def test_resolve_selector_caret_unknown_label_raises():
+    rmd = _chunk_parser.parse_notebook(str(RMD))
+    with pytest.raises(ValueError, match="not found"):
+        _chunk_parser.resolve_selector(rmd, "^nope")
+    with pytest.raises(ValueError, match="not found"):
+        _chunk_parser.resolve_selector(rmd, "nope^")
