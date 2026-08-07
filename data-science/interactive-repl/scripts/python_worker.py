@@ -157,10 +157,20 @@ def _make_import_wrapper(_orig_import):
 
 
 def main():
-    # Move protocol pipes off fd 0/1 so user subprocesses inheriting them can't
-    # corrupt the stream. Real stdin/stdout → devnull.
-    protocol_in = os.fdopen(os.dup(0), "r", encoding="utf-8", errors="replace")
-    protocol_out = os.fdopen(os.dup(1), "w", encoding="utf-8", buffering=1)
+    # Protocol channel: TCP client when REPL_PORT is set (slurm/compute-node
+    # mode, launched via srun), else stdin/stdout pipes (local mode). Real
+    # stdin/stdout → devnull in both cases so user subprocesses inheriting
+    # them can't corrupt the stream.
+    port = os.environ.get("REPL_PORT")
+    if port:
+        import socket as _sock
+        host = os.environ.get("REPL_HOST", "localhost")
+        conn = _sock.create_connection((host, int(port)), timeout=30)
+        protocol_in = conn.makefile("r", encoding="utf-8", errors="replace")
+        protocol_out = conn.makefile("w", encoding="utf-8", buffering=1)
+    else:
+        protocol_in = os.fdopen(os.dup(0), "r", encoding="utf-8", errors="replace")
+        protocol_out = os.fdopen(os.dup(1), "w", encoding="utf-8", buffering=1)
     os.dup2(os.open(os.devnull, os.O_RDONLY), 0)
     os.dup2(os.open(os.devnull, os.O_WRONLY), 1)
 
@@ -184,8 +194,14 @@ def main():
     import linecache as _lc
     counter = 0
 
-    # Ready marker on the protocol channel.
-    protocol_out.write(_common.encode_line({"ready": True}))
+    # Ready marker: token (validated by the server in slurm mode — an open
+    # port on a shared login node is an injection risk) + SLURM job info.
+    protocol_out.write(_common.encode_line({
+        "ready": True,
+        "token": os.environ.get("REPL_TOKEN", ""),
+        "job_id": os.environ.get("SLURM_JOB_ID"),
+        "node": os.environ.get("SLURM_JOB_NODELIST"),
+    }))
     protocol_out.flush()
 
     while True:
