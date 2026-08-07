@@ -1031,13 +1031,14 @@ async def test_r_run_chunk_stop_on_first_error(monkeypatch, tmp_path):
     from r_repl_server import mcp
     rmd = pathlib.Path(__file__).resolve().parent / "fixtures" / "notebook.Rmd"
     async with Client(mcp) as client:
-        # range 4-5: chunk 4 (print(x)) runs; chunk 5 (stop("boom")) errors → stop
-        r = await client.call_tool("run_chunk", {"session": "rrc4", "file": str(rmd), "selector": "4-5"})
+        # range 1-5: 1 (x<-1), 2 (df), 3 (eval=F skip), 4 (print(x)→"1"), 5 (stop("boom") → error → stop)
+        r = await client.call_tool("run_chunk", {"session": "rrc4", "file": str(rmd), "selector": "1-5"})
         sc = r.structured_content
         assert sc["error"] is not None
         assert "boom" in sc["error"]
         assert sc["failed_chunk"]["index"] == 5
-        assert [c["index"] for c in sc["ran"]] == [4]
+        assert [c["index"] for c in sc["ran"]] == [1, 2, 4]   # 3 skipped, 5 errored (not in ran)
+        assert [c["index"] for c in sc["skipped"]] == [3]
 ```
 
 Add `import pathlib` to the test file's imports if not present (the existing file starts with `import pytest`).

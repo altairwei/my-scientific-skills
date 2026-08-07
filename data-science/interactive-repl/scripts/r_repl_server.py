@@ -17,6 +17,7 @@ HERE = Path(__file__).resolve().parent
 REPL_R = HERE / "repl.R"
 sys.path.insert(0, str(HERE))
 import _common  # noqa: E402
+import _chunk_parser  # noqa: E402
 
 mcp = MCPServer("r-repl")
 
@@ -37,6 +38,34 @@ class RunResult(BaseModel):
     plots: list[str] = Field(default_factory=list)
     truncated: bool = False
     degraded: bool = False
+
+
+class ChunkRan(BaseModel):
+    index: int
+    label: str
+    language: str
+
+
+class ChunkSkipped(BaseModel):
+    index: int
+    label: str
+    language: str
+    reason: str
+
+
+class RunChunkResult(BaseModel):
+    stdout: str
+    stderr: str
+    error: str | None = None
+    plots: list[str] = Field(default_factory=list)
+    truncated: bool = False
+    degraded: bool = False
+    ran: list[ChunkRan] = Field(default_factory=list)
+    skipped: list[ChunkSkipped] = Field(default_factory=list)
+    failed_chunk: ChunkRan | None = None
+
+
+_LANG = "r"
 
 
 class VarSummary(BaseModel):
@@ -165,6 +194,60 @@ def run_code(session: str, code: str, timeout: int = 300) -> RunResult:
     (saved-PNG paths), truncated/degraded. The session is auto-created on first
     call. Use distinct session names per task."""
     return _to_run_result(_call_worker(session, code))
+
+
+@mcp.tool()
+def run_chunk(session: str, file: str, selector: str) -> RunChunkResult:
+    """Run one chunk (or a range) from a .Rmd/.qmd/.ipynb notebook in the session.
+    selector = label | index | 'N-M' | 'N-'. Parses, resolves, runs each chunk in
+    notebook order via the session worker. Skips eval=FALSE and wrong-language chunks
+    (listed in `skipped`). Stops on first error (dependency order). Pass an absolute
+    `file` path — the server's cwd may differ from the agent's."""
+    try:
+        chunks = _chunk_parser.parse_notebook(file)
+    except (FileNotFoundError, ValueError) as e:
+        return RunChunkResult(stdout="", stderr="", error=str(e))
+    try:
+        selected = _chunk_parser.resolve_selector(chunks, selector)
+    except ValueError as e:
+        return RunChunkResult(stdout="", stderr="", error=str(e))
+
+    ran: list[ChunkRan] = []
+    skipped: list[ChunkSkipped] = []
+    out_parts: list[str] = []
+    err_parts: list[str] = []
+    plots: list[str] = []
+    truncated = False
+    degraded = False
+    for c in selected:
+        if not c.eval:
+            skipped.append(ChunkSkipped(index=c.index, label=c.label,
+                                        language=c.language, reason="eval=FALSE"))
+            continue
+        if c.language != _LANG:
+            other = "r-repl" if _LANG == "python" else "python-repl"
+            skipped.append(ChunkSkipped(index=c.index, label=c.label, language=c.language,
+                                        reason=f"language={c.language}, use {other}"))
+            continue
+        r = _call_worker(session, c.code)
+        if r.get("error"):
+            return RunChunkResult(
+                stdout="\n".join(s for s in out_parts if s),
+                stderr="\n".join(s for s in err_parts if s),
+                error=r["error"], plots=plots, truncated=truncated, degraded=degraded,
+                ran=ran, skipped=skipped,
+                failed_chunk=ChunkRan(index=c.index, label=c.label, language=c.language))
+        out_parts.append(r.get("stdout", ""))
+        err_parts.append(r.get("stderr", ""))
+        plots.extend(r.get("plots") or [])
+        truncated = truncated or r.get("truncated", False)
+        degraded = degraded or r.get("degraded", False)
+        ran.append(ChunkRan(index=c.index, label=c.label, language=c.language))
+    return RunChunkResult(
+        stdout="\n".join(s for s in out_parts if s),
+        stderr="\n".join(s for s in err_parts if s),
+        error=None, plots=plots, truncated=truncated, degraded=degraded,
+        ran=ran, skipped=skipped, failed_chunk=None)
 
 
 @mcp.tool()
