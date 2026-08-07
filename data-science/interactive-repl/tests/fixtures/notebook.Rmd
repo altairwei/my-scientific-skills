@@ -1,0 +1,25 @@
+---
+title: "Test Rmd"
+---
+
+```{r setup, include=FALSE}
+x <- 1
+```
+
+Some narrative.
+
+```{r load-data}
+df <- data.frame(a = 1:3)
+```
+
+```{r, eval=FALSE}
+print("do not run me")
+```
+
+```{r}
+print(x)
+```
+
+```{r boom}
+stop("boom")
+```

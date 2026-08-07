@@ -1,0 +1,23 @@
+---
+title: "Test qmd"
+---
+
+```{r}
+#| label: setup-qmd
+#| include: false
+x <- 1
+```
+
+```{python}
+#| label: py-chunk
+print("hello from python")
+```
+
+```{r}
+#| eval: false
+print("r chunk eval false")
+```
+
+```{r visible-r}
+print(x)
+```
