@@ -172,3 +172,36 @@ async def test_r_run_chunk_sets_cwd_to_notebook_dir(monkeypatch, tmp_path):
         sc = r.structured_content
         assert sc["error"] is None
         assert str(tmp_path) in sc["stdout"]
+
+
+@pytest.mark.asyncio
+async def test_r_run_chunk_run_above(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from r_repl_server import mcp
+    rmd = pathlib.Path(__file__).resolve().parent / "fixtures" / "notebook.Rmd"
+    async with Client(mcp) as client:
+        # ^load-data → chunks 1..2 (setup + load-data)
+        r = await client.call_tool("run_chunk", {"session": "rra1", "file": str(rmd), "selector": "^load-data"})
+        sc = r.structured_content
+        assert sc["error"] is None
+        assert [c["index"] for c in sc["ran"]] == [1, 2]
+        assert sc["skipped"] == []
+
+
+@pytest.mark.asyncio
+async def test_r_run_chunk_run_from(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from r_repl_server import mcp
+    rmd = pathlib.Path(__file__).resolve().parent / "fixtures" / "notebook.Rmd"
+    async with Client(mcp) as client:
+        # load-data^ → chunks 2..5; chunk 3 eval=FALSE skipped; chunk 4 (print(x)) errors
+        # because x (set in chunk 1) isn't in the range → stop before chunk 5.
+        r = await client.call_tool("run_chunk", {"session": "rrf1", "file": str(rmd), "selector": "load-data^"})
+        sc = r.structured_content
+        assert sc["error"] is not None
+        assert "x" in sc["error"]                  # object 'x' not found (message is locale-dependent)
+        assert sc["failed_chunk"]["index"] == 4
+        assert [c["index"] for c in sc["ran"]] == [2]
+        assert [c["index"] for c in sc["skipped"]] == [3]

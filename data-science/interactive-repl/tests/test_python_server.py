@@ -172,3 +172,34 @@ async def test_list_variables_excludes_preimported_stdlib(monkeypatch, tmp_path)
         assert "x" in names
         for leaked in ("json", "math", "os", "re", "sys"):
             assert leaked not in names, f"{leaked} leaked in list_variables"
+
+
+@pytest.mark.asyncio
+async def test_run_chunk_run_above(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from python_repl_server import mcp
+    qmd = pathlib.Path(__file__).resolve().parent / "fixtures" / "notebook.qmd"
+    async with Client(mcp) as client:
+        # ^py-chunk → chunks 1..2; chunk 1 is R → skipped (language), chunk 2 (python) runs
+        r = await client.call_tool("run_chunk", {"session": "pra1", "file": str(qmd), "selector": "^py-chunk"})
+        sc = r.structured_content
+        assert sc["error"] is None
+        assert [c["index"] for c in sc["ran"]] == [2]
+        assert [c["index"] for c in sc["skipped"]] == [1]
+        assert "hello from python" in sc["stdout"]
+
+
+@pytest.mark.asyncio
+async def test_run_chunk_run_from(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from python_repl_server import mcp
+    qmd = pathlib.Path(__file__).resolve().parent / "fixtures" / "notebook.qmd"
+    async with Client(mcp) as client:
+        # py-chunk^ → chunks 2..4; 2 (python) runs, 3 (eval=FALSE) skipped, 4 (R) skipped
+        r = await client.call_tool("run_chunk", {"session": "prf1", "file": str(qmd), "selector": "py-chunk^"})
+        sc = r.structured_content
+        assert sc["error"] is None
+        assert [c["index"] for c in sc["ran"]] == [2]
+        assert sorted(c["index"] for c in sc["skipped"]) == [3, 4]
