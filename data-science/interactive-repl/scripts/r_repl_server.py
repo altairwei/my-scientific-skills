@@ -90,6 +90,22 @@ class InspectResult(BaseModel):
     error: str | None = None
 
 
+class Probe(BaseModel):
+    srun_available: bool = False
+    already_in_allocation: bool = False
+    ssh_available: bool = False
+
+
+class WorkerModeInfo(BaseModel):
+    mode: str
+    source: str
+    slurm_flags: str = ""
+    transport: str = "direct"
+    host: str = ""
+    timeout: int = 300
+    probe: Probe
+
+
 class Ack(BaseModel):
     ok: bool
     message: str = ""
@@ -309,6 +325,34 @@ def inject(session: str, path: str) -> Ack:
         code = f.read()
     r = _call_worker(session, code)
     return Ack(ok=r.get("error") is None, message=r.get("error") or f"injected {path}")
+
+
+@mcp.tool()
+def worker_mode(mode: str = None, slurm_flags: str = None,
+                transport: str = None) -> WorkerModeInfo:
+    """Get or set how this server launches workers. No args = probe the
+    environment (srun present? already inside a job? ssh for tunnels?) and
+    report the current mode and its source ("env" default or "tool" override).
+    mode="local"|"slurm" switches; slurm_flags overrides
+    INTERACTIVE_REPL_SLURM (omit or pass "" to keep the env default);
+    transport="direct"|"tunnel" overrides INTERACTIVE_REPL_TRANSPORT. Tool
+    settings apply to sessions created after the switch (existing sessions
+    keep running until restart) and reset when the server restarts."""
+    if mode is not None:
+        _slurm.set_runtime(mode=mode)
+    if slurm_flags is not None:
+        _slurm.set_runtime(flags=slurm_flags)
+    if transport is not None:
+        _slurm.set_runtime(transport=transport)
+    return WorkerModeInfo(
+        mode="slurm" if _slurm.slurm_enabled() else "local",
+        source="tool" if "mode" in _slurm._runtime else "env",
+        slurm_flags=_slurm.flags(),
+        transport=_slurm.transport(),
+        host=_slurm.login_host(),
+        timeout=_slurm.srun_timeout(),
+        probe=Probe(**_slurm.probe()),
+    )
 
 
 @mcp.tool()

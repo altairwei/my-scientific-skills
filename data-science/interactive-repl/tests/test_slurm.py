@@ -121,21 +121,16 @@ SCRIPTS = pathlib.Path(__file__).resolve().parent.parent / "scripts"
 FAKE_SRUN = textwrap.dedent("""\
     #!/bin/sh
     # Real srun consumes its own flags and runs the remaining argv as the job
-    # command — strip leading srun flags (attached or space-separated values)
-    # so `exec "$@"` runs just the worker command.
+    # command. Strip flags by position: the worker command always starts with
+    # an absolute path (python / Rscript / conda run ...) or a bare `R`.
+    # Flag parsing can't know srun's per-flag arity, so stop at the first
+    # arg that is a path or R/conda — that's the command.
     echo "srun $*" >> "$FAKE_SRUN_LOG"
     while [ $# -gt 0 ]; do
       case "$1" in
-        -*)
-          shift
-          if [ $# -gt 0 ]; then
-            case "$1" in
-              -*) ;;
-              *) shift ;;
-            esac
-          fi
-          ;;
-        *) break ;;
+        */*) break ;;
+        R|conda) break ;;
+        *) shift ;;
       esac
     done
     export SLURM_JOB_ID=4242
@@ -363,3 +358,86 @@ async def test_tunnel_r_end_to_end(monkeypatch, tmp_path):
         si = (await client.call_tool("session_info", {"session": "tun2"})).structured_content
         assert si["transport"] == "tunnel"
         assert "-L" in (tmp_path / "ssh.log").read_text()
+
+
+@pytest.mark.asyncio
+async def test_worker_mode_probe_defaults(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    monkeypatch.delenv("INTERACTIVE_REPL_SLURM", raising=False)
+    monkeypatch.delenv("INTERACTIVE_REPL_TRANSPORT", raising=False)
+    from mcp import Client
+    from python_repl_server import mcp
+    async with Client(mcp) as client:
+        r = await client.call_tool("worker_mode", {})
+        sc = r.structured_content
+        assert sc["mode"] == "local"
+        assert sc["source"] == "env"
+        assert sc["transport"] == "direct"
+        assert set(sc["probe"]) == {"srun_available", "already_in_allocation", "ssh_available"}
+
+
+@pytest.mark.asyncio
+async def test_worker_mode_switch_routes_new_sessions(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    monkeypatch.setenv("INTERACTIVE_REPL_HOST", "127.0.0.1")
+    _install_shims(tmp_path, monkeypatch)
+    from mcp import Client
+    from python_repl_server import mcp
+    async with Client(mcp) as client:
+        r = await client.call_tool("worker_mode", {"mode": "slurm", "slurm_flags": "--partition=test"})
+        sc = r.structured_content
+        assert sc["mode"] == "slurm"
+        assert sc["source"] == "tool"
+        assert sc["slurm_flags"] == "--partition=test"
+        # new session goes through srun
+        await client.call_tool("run_code", {"session": "wm1", "code": "1 + 1"})
+        si = (await client.call_tool("session_info", {"session": "wm1"})).structured_content
+        assert si["job_id"] == "4242"
+        assert "--partition=test" in (tmp_path / "srun.log").read_text()
+
+
+@pytest.mark.asyncio
+async def test_worker_mode_local_overrides_env(monkeypatch, tmp_path):
+    """Tool mode=local beats INTERACTIVE_REPL_SLURM set in the environment."""
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    monkeypatch.setenv("INTERACTIVE_REPL_SLURM", "--partition=env")
+    _install_shims(tmp_path, monkeypatch)
+    from mcp import Client
+    from python_repl_server import mcp
+    async with Client(mcp) as client:
+        r = await client.call_tool("worker_mode", {"mode": "local"})
+        assert r.structured_content["mode"] == "local"
+        await client.call_tool("run_code", {"session": "wm2", "code": "1 + 1"})
+        si = (await client.call_tool("session_info", {"session": "wm2"})).structured_content
+        assert si["transport"] == "local"
+        assert not (tmp_path / "srun.log").exists()   # no srun was launched
+
+
+@pytest.mark.asyncio
+async def test_worker_mode_switch_does_not_affect_existing_sessions(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    monkeypatch.setenv("INTERACTIVE_REPL_HOST", "127.0.0.1")
+    _install_shims(tmp_path, monkeypatch)
+    from mcp import Client
+    from python_repl_server import mcp
+    async with Client(mcp) as client:
+        await client.call_tool("worker_mode", {"mode": "slurm"})
+        await client.call_tool("run_code", {"session": "wm3", "code": "x = 42"})
+        # switch to local — the running session must keep working
+        await client.call_tool("worker_mode", {"mode": "local"})
+        r = await client.call_tool("run_code", {"session": "wm3", "code": "x"})
+        assert "42" in r.structured_content["stdout"]
+        si = (await client.call_tool("session_info", {"session": "wm3"})).structured_content
+        assert si["transport"] == "direct"      # launched under slurm, still slurm
+
+
+@pytest.mark.asyncio
+async def test_worker_mode_r_server_smoke(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from r_repl_server import mcp
+    async with Client(mcp) as client:
+        r = await client.call_tool("worker_mode", {})
+        sc = r.structured_content
+        assert sc["mode"] == "local"
+        assert set(sc["probe"]) == {"srun_available", "already_in_allocation", "ssh_available"}
