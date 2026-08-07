@@ -14,7 +14,7 @@ Protocol pipes are duped off fd 0/1 so user subprocesses inheriting them can't
 corrupt the stream; real stdin/stdout → devnull. Errors are caught — the response
 ALWAYS returns (no hangs). Adapted from wisp-science's kernel_worker.py.
 """
-import builtins, io, json, os, sys, traceback, uuid
+import builtins, io, json, os, shutil, subprocess, sys, traceback, uuid
 
 # Force Agg BEFORE matplotlib is ever imported (so plt.show()/GUI backends can't block).
 os.environ.setdefault("MPLBACKEND", "Agg")
@@ -78,11 +78,12 @@ def _neutralize_pyplot_show():
 
 
 def _capture_new_figures():
-    """Save any new matplotlib figures to the plot dir; return paths; close them."""
-    try:
-        import matplotlib.pyplot as plt
-    except Exception:
-        return []
+    """Save any new matplotlib figures to the plot dir; return paths; close them.
+    Uses sys.modules (not a fresh import) so we don't trigger a lazy-install of
+    matplotlib when the user hasn't plotted — only capture figures the user created."""
+    plt = sys.modules.get("matplotlib.pyplot")
+    if plt is None:
+        return []  # user never imported matplotlib → no figures to capture
     nums = plt.get_fignums()
     if not nums:
         return []
@@ -101,6 +102,60 @@ def _capture_new_figures():
     return paths
 
 
+# Heavy data-science deps are NOT in the server's startup env (only mcp+pydantic are).
+# On first import, fetch the missing top-level package into a persistent dir via
+# `uv pip install --target` (reuses uv's wheel cache → fast after the first time) and
+# add it to sys.path so the retry import finds it.
+_LAZY_PKGS = {"numpy": "numpy", "pandas": "pandas", "matplotlib": "matplotlib"}
+
+
+def _py_site_dir():
+    base = os.environ.get("CLAUDE_PLUGIN_DATA") or "/tmp/interactive-repl-data"
+    d = os.path.join(base, "py-site")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _uv_bin():
+    return shutil.which("uv") or "uv"
+
+
+def _lazy_install(top):
+    target = _py_site_dir()
+    if target not in sys.path:
+        sys.path.insert(0, target)
+    try:
+        subprocess.run([_uv_bin(), "pip", "install", "--target", target,
+                        _LAZY_PKGS.get(top, top)],
+                       check=True, capture_output=True, timeout=120)
+        return True
+    except Exception:
+        return False
+
+
+def _make_import_wrapper(_orig_import):
+    """Wrap builtins.__import__: on ModuleNotFoundError for a lazy pkg, install it
+    into py-site and retry; configure pandas / neutralize plt.show on first import."""
+    def import_wrapper(name, *a, **k):
+        try:
+            mod = _orig_import(name, *a, **k)
+        except ModuleNotFoundError:
+            top = name.split(".")[0]
+            if top in _LAZY_PKGS and _lazy_install(top):
+                mod = _orig_import(name, *a, **k)  # retry; py-site now on sys.path
+            else:
+                raise
+        try:
+            if name == "pandas":
+                _configure_pandas()
+            elif name.startswith("matplotlib"):
+                _neutralize_pyplot_show()
+        except Exception:
+            pass
+        return mod
+    return import_wrapper
+
+
 def main():
     # Move protocol pipes off fd 0/1 so user subprocesses inheriting them can't
     # corrupt the stream. Real stdin/stdout → devnull.
@@ -114,6 +169,10 @@ def main():
     namespace = {"__name__": "__main__", "__builtins__": __builtins__}
     import json as _j, math, os as _os, re, sys as _sys
     namespace.update({"json": _j, "math": math, "os": _os, "re": re, "sys": _sys})
+    # Install the lazy-import hook BEFORE pre-importing numpy/pandas, so a missing
+    # dep is fetched into py-site on first use (the server starts with only mcp+pydantic).
+    builtins.__import__ = _make_import_wrapper(builtins.__import__)
+
     for mod in ("numpy", "pandas"):
         try:
             namespace[mod] = __import__(mod)
@@ -121,20 +180,6 @@ def main():
             pass
     if "pandas" in namespace:
         _configure_pandas()
-
-    # Lazy import hook: configure pandas / neutralize plt.show on first import.
-    _orig_import = builtins.__import__
-    def import_wrapper(name, *a, **k):
-        mod = _orig_import(name, *a, **k)
-        try:
-            if name == "pandas":
-                _configure_pandas()
-            elif name.startswith("matplotlib"):
-                _neutralize_pyplot_show()
-        except Exception:
-            pass
-        return mod
-    builtins.__import__ = import_wrapper
 
     import linecache as _lc
     counter = 0

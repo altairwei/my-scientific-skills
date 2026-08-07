@@ -1,4 +1,7 @@
 import json, os, subprocess, sys, pathlib
+import pytest
+
+import python_worker
 
 HERE = pathlib.Path(__file__).parent
 WORKER = HERE.parent / "scripts" / "python_worker.py"
@@ -90,3 +93,79 @@ def test_plt_show_is_noop():
         assert r["error"] is None
     finally:
         p.stdin.close(); p.terminate()
+
+
+# ---- lazy dep install -------------------------------------------------------
+# The server starts with only mcp+pydantic installed; numpy/pandas/matplotlib are
+# fetched on first import via `uv pip install --target <py-site>` into a persistent
+# dir. These unit-test the logic with subprocess.run mocked (no network).
+
+def test_lazy_install_invokes_uv_pip_target(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    captured = {}
+    def fake_run(cmd, **k):
+        captured["cmd"] = list(cmd)
+        return subprocess.CompletedProcess(cmd, 0)
+    monkeypatch.setattr(python_worker.subprocess, "run", fake_run)
+    assert python_worker._lazy_install("pandas") is True
+    cmd = captured["cmd"]
+    assert "pip" in cmd and "install" in cmd
+    assert "--target" in cmd and "pandas" in cmd
+    assert str(tmp_path / "py-site") in cmd
+    assert str(tmp_path / "py-site") in sys.path   # added so the retry import finds it
+
+
+def test_lazy_install_returns_false_on_failure(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    def fake_run(cmd, **k):
+        raise subprocess.CalledProcessError(1, cmd)
+    monkeypatch.setattr(python_worker.subprocess, "run", fake_run)
+    assert python_worker._lazy_install("pandas") is False
+
+
+def test_import_wrapper_installs_on_missing(monkeypatch):
+    calls = []
+    def fake_orig(name, *a, **k):
+        calls.append(name)
+        if len(calls) == 1:
+            raise ModuleNotFoundError("pandas")
+        return "FAKE_PANDAS"
+    installed = []
+    monkeypatch.setattr(python_worker, "_lazy_install", lambda top: installed.append(top) or True)
+    wrapper = python_worker._make_import_wrapper(fake_orig)
+    mod = wrapper("pandas")
+    assert mod == "FAKE_PANDAS"
+    assert installed == ["pandas"]
+    assert calls == ["pandas", "pandas"]   # initial miss + retry
+
+
+def test_import_wrapper_reraises_unknown_module(monkeypatch):
+    def fake_orig(name, *a, **k):
+        raise ModuleNotFoundError("notapackage")
+    installed = []
+    monkeypatch.setattr(python_worker, "_lazy_install", lambda top: installed.append(top) or True)
+    wrapper = python_worker._make_import_wrapper(fake_orig)
+    with pytest.raises(ModuleNotFoundError):
+        wrapper("notapackage")
+    assert installed == []                 # not a lazy pkg → no install attempt
+
+
+def test_import_wrapper_noop_when_present(monkeypatch):
+    installed = []
+    monkeypatch.setattr(python_worker, "_lazy_install", lambda top: installed.append(top) or True)
+    def fake_orig(name, *a, **k):
+        return "FAKE_MOD"
+    wrapper = python_worker._make_import_wrapper(fake_orig)
+    mod = wrapper("pandas")
+    assert mod == "FAKE_MOD"
+    assert installed == []                 # already present → no install
+
+
+def test_capture_new_figures_does_not_import_matplotlib(monkeypatch):
+    # If the user never imported matplotlib, _capture_new_figures must NOT trigger an
+    # import (which would otherwise lazy-install matplotlib on every first cell).
+    monkeypatch.delitem(sys.modules, "matplotlib", raising=False)
+    monkeypatch.delitem(sys.modules, "matplotlib.pyplot", raising=False)
+    assert python_worker._capture_new_figures() == []
+    assert "matplotlib" not in sys.modules           # no import happened
+    assert "matplotlib.pyplot" not in sys.modules

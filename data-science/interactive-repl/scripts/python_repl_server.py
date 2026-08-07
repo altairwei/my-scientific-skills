@@ -2,7 +2,7 @@
 # data-science/interactive-repl/scripts/python_repl_server.py
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["mcp", "pydantic", "numpy", "matplotlib", "pandas"]
+# dependencies = ["mcp", "pydantic"]
 # ///
 """python-repl MCP stdio server. Spawns python_worker.py per named session
 and proxies tool calls to it over JSON-per-line stdin/stdout."""
