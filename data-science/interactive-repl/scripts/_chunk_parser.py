@@ -135,3 +135,31 @@ def _opt_bool(val: str | None, default: bool) -> bool:
     if val is None:
         return default
     return val.strip().lower() not in ("false", "f", "0", "no")
+
+
+def resolve_selector(chunks: list[Chunk], selector: str) -> list[Chunk]:
+    """Resolve a selector to an ordered list of chunks.
+
+    Order of resolution: range (`N-M` or `N-`) → index (`N`) → label. Numeric
+    selectors take precedence over label — a chunk labelled purely with digits is
+    pathological. Raises ValueError on out-of-bounds or no match (with available
+    labels in the message).
+    """
+    if re.fullmatch(r"\d+-\d*", selector):
+        a, _, b = selector.partition("-")
+        start = int(a)
+        end = int(b) if b else len(chunks)
+        if start < 1 or end > len(chunks) or start > end:
+            raise ValueError(f"range '{selector}' out of bounds (1-{len(chunks)})")
+        return chunks[start - 1:end]
+    if re.fullmatch(r"\d+", selector):
+        idx = int(selector)
+        if idx < 1 or idx > len(chunks):
+            raise ValueError(f"index {idx} out of bounds (1-{len(chunks)})")
+        return [chunks[idx - 1]]
+    matches = [c for c in chunks if c.label == selector]
+    if not matches:
+        labels = ", ".join(c.label for c in chunks)
+        raise ValueError(
+            f"chunk '{selector}' not found. Available: {labels} (indices 1-{len(chunks)})")
+    return matches

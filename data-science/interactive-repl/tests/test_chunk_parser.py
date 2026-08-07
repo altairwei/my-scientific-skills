@@ -98,3 +98,47 @@ def test_parse_qmd_label_from_pipe_when_no_fence_label():
     # chunk 1 has no fence label but #| label: setup-qmd
     chunks = _chunk_parser.parse_notebook(str(QMD))
     assert chunks[0].label == "setup-qmd"
+
+
+# ---- Task 3: resolve_selector ----
+def _chunks():
+    return _chunk_parser.parse_notebook(str(IPYNB))
+
+
+def test_resolve_selector_single_index():
+    sel = _chunk_parser.resolve_selector(_chunks(), "2")
+    assert len(sel) == 1 and sel[0].index == 2
+
+
+def test_resolve_selector_label():
+    rmd = _chunk_parser.parse_notebook(str(RMD))
+    sel = _chunk_parser.resolve_selector(rmd, "boom")
+    assert len(sel) == 1 and sel[0].label == "boom"
+
+
+def test_resolve_selector_range():
+    sel = _chunk_parser.resolve_selector(_chunks(), "2-4")
+    assert [c.index for c in sel] == [2, 3, 4]
+
+
+def test_resolve_selector_open_range():
+    sel = _chunk_parser.resolve_selector(_chunks(), "3-")
+    assert [c.index for c in sel] == [3, 4]
+
+
+def test_resolve_selector_numeric_takes_precedence_over_label():
+    # A purely-numeric selector resolves as an index, not a label.
+    sel = _chunk_parser.resolve_selector(_chunks(), "1")
+    assert sel[0].index == 1
+
+
+def test_resolve_selector_out_of_bounds_raises():
+    with pytest.raises(ValueError, match="out of bounds"):
+        _chunk_parser.resolve_selector(_chunks(), "0")
+    with pytest.raises(ValueError, match="out of bounds"):
+        _chunk_parser.resolve_selector(_chunks(), "99")
+
+
+def test_resolve_selector_not_found_raises():
+    with pytest.raises(ValueError, match="not found"):
+        _chunk_parser.resolve_selector(_chunks(), "nope")
