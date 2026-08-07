@@ -30,9 +30,12 @@ defined).
 
 ## Missing dependencies
 
-- `uv` not installed → install `uv` (the servers bootstrap via `uv run`).
-- `mcp` / `pydantic` not installed → `uv run` auto-installs them (declared in each
-  server's `# /// script` metadata).
+- `uv` not installed — or `MCP server failed to start` / `ModuleNotFoundError: No module
+  named 'mcp'` — → install `uv` (one line): `curl -LsSf https://astral.sh/uv/install.sh | sh`,
+  then **restart Claude Code** so the servers pick up `uv` on `PATH`. The `data-science`
+  plugin's MCP servers launch via `uv run`, which reads each server's `# /// script`
+  metadata and auto-installs `mcp`/`pydantic`/… into an ephemeral env — so once `uv` exists,
+  no further `pip install` is needed.
 - R / `jsonlite` missing → see `r-setup.md`.
 
 ## Context compaction mid-analysis

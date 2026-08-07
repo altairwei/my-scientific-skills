@@ -41,6 +41,19 @@ Skills for scientific writing, literature work, and publishing workflows.
 
 Each category directory is a plugin; install only the categories you need.
 
+> **`data-science` plugin prerequisite — `uv`:** the `interactive-repl` skill bundles two
+> MCP servers (`python-repl`, `r-repl`) that launch via [`uv`](https://docs.astral.sh/uv/).
+> `uv run` reads each server's inline `# /// script` metadata and installs the Python deps
+> (`mcp`, `pydantic`, …) into an ephemeral env, so **once `uv` exists, no `pip install` is
+> needed**. If `uv` isn't installed, add it first:
+>
+> ```bash
+> curl -LsSf https://astral.sh/uv/install.sh | sh
+> ```
+>
+> Then restart Claude Code so the MCP servers pick up `uv` on `PATH`. (The `r-repl` server
+> also needs R installed — see `data-science/interactive-repl/references/r-setup.md`.)
+
 ### Manual
 
 Clone this repository and copy the skill directories you want into `~/.claude/skills/`:
