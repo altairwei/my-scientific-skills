@@ -22,7 +22,12 @@
 .repl <- new.env(parent = emptyenv())
 .repl$port <- as.integer(Sys.getenv("REPL_PORT", "0"))
 if (is.na(.repl$port) || .repl$port <= 0) stop("REPL_PORT env var must be set to the server's TCP port")
-.repl$con <- socketConnection(host = "localhost", port = .repl$port, server = FALSE,
+# Slurm mode: REPL_HOST is the login node as seen from the compute node
+# (default "localhost" = local mode). Direct transport connects straight
+# across the interconnect; the tunnel branch (REPL_TRANSPORT=tunnel) is
+# implemented in the same place — see the `if` below.
+.repl$host <- Sys.getenv("REPL_HOST", "localhost")
+.repl$con <- socketConnection(host = .repl$host, port = .repl$port, server = FALSE,
                               blocking = TRUE, open = "r+b", timeout = 86400L)
 on.exit(close(.repl$con))
 options(width = 400)  # wide so captured R lines don't wrap in the response
@@ -82,8 +87,10 @@ on.exit(detach("interactive-repl:helpers"), add = TRUE)
        truncated = FALSE, degraded = FALSE)
 }
 
-# Ready marker on the protocol channel.
-.repl$write_json(list(ready = TRUE))
+# Ready marker: token (validated by the server in slurm mode) + SLURM job info.
+.repl$write_json(list(ready = TRUE, token = Sys.getenv("REPL_TOKEN", ""),
+                      job_id = Sys.getenv("SLURM_JOB_ID"),
+                      node = Sys.getenv("SLURM_JOB_NODELIST")))
 
 # Main loop inside a function so req/res/rid/line are not exposed in globalenv (else
 # list_variables would leak them). .repl (dot-prefixed, in globalenv) is reachable as
