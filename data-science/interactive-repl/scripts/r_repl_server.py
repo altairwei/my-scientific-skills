@@ -18,14 +18,18 @@ REPL_R = HERE / "repl.R"
 sys.path.insert(0, str(HERE))
 import _common  # noqa: E402
 import _chunk_parser  # noqa: E402
+import _slurm  # noqa: E402
 
 mcp = MCPServer("r-repl")
 
 
 class _Session:
-    def __init__(self, proc, conn):
+    def __init__(self, proc, conn, job_id=None, node=None, transport="local"):
         self.proc = proc
         self.conn = conn
+        self.job_id = job_id
+        self.node = node
+        self.transport = transport
 
 
 _sessions: dict[str, _Session] = {}
@@ -96,6 +100,9 @@ class SessionInfo(BaseModel):
     running: bool
     pid: int | None = None
     plot_dir: str = ""
+    job_id: str | None = None
+    node: str | None = None
+    transport: str = "local"
 
 
 # R code injected to list .GlobalEnv objects as JSON. lapply + jsonlite::toJSON.
@@ -117,27 +124,32 @@ def _base_sidecar_src() -> str:
 
 
 def _start(session: str) -> _Session:
-    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    srv.bind(("127.0.0.1", 0))
-    srv.listen(1)
-    srv.settimeout(30)
-    port = srv.getsockname()[1]
     r_env = os.environ.get("INTERACTIVE_REPL_R_ENV")
     r_bin = os.environ.get("INTERACTIVE_REPL_R_BIN", "R")
     argv = [r_bin, "--no-save", "--no-restore", "-f", str(REPL_R)]
-    env = {**os.environ, "REPL_PORT": str(port)}
     cmd = (["conda", "run", "-n", r_env, "--no-capture-output", *argv]
            if r_env else argv)
-    proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, text=True)
-    conn, _ = srv.accept()
-    srv.close()  # accepted conn is independent of the listener
-    buf = b""
-    while not buf.endswith(b"\n"):
-        buf += conn.recv(65536)
-    ready = json.loads(buf.decode())
-    if not ready.get("ready"):
-        raise RuntimeError(f"R worker failed to start: {ready!r} {proc.stderr.read()!r}")
+    if _slurm.slurm_enabled():
+        proc, conn, meta = _slurm.launch_remote(cmd)
+        s = _Session(proc, conn, meta["job_id"], meta["node"], meta["transport"])
+    else:
+        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        srv.settimeout(30)
+        port = srv.getsockname()[1]
+        env = {**os.environ, "REPL_PORT": str(port)}
+        proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True)
+        conn, _ = srv.accept()
+        srv.close()  # accepted conn is independent of the listener
+        buf = b""
+        while not buf.endswith(b"\n"):
+            buf += conn.recv(65536)
+        ready = json.loads(buf.decode())
+        if not ready.get("ready"):
+            raise RuntimeError(f"R worker failed to start: {ready!r} {proc.stderr.read()!r}")
+        s = _Session(proc, conn)
     # Auto-source the base sidecar so who/peek/fig are available immediately.
     base = _base_sidecar_src()
     if base:
@@ -145,7 +157,7 @@ def _start(session: str) -> _Session:
         buf = b""
         while not buf.endswith(b"\n"):
             buf += conn.recv(65536)
-    return _Session(proc, conn)
+    return s
 
 
 def _get(session: str) -> _Session:
@@ -157,9 +169,9 @@ def _get(session: str) -> _Session:
 
 
 def _call_worker(session: str, code: str) -> dict:
-    s = _get(session)
     rid = uuid.uuid4().hex
     try:
+        s = _get(session)
         s.conn.sendall(_common.encode_line({"id": rid, "code": code}).encode())
         buf = b""
         while not buf.endswith(b"\n"):
@@ -173,6 +185,12 @@ def _call_worker(session: str, code: str) -> dict:
     except (BrokenPipeError, OSError) as e:
         _sessions.pop(session, None)
         return {"stdout": "", "stderr": "", "error": f"R worker died: {e}",
+                "plots": [], "truncated": False, "degraded": False}
+    except RuntimeError as e:
+        # session-start failures (queue timeout, token mismatch) surface as
+        # structured errors — raising hangs the in-process MCP client.
+        _sessions.pop(session, None)
+        return {"stdout": "", "stderr": "", "error": str(e),
                 "plots": [], "truncated": False, "degraded": False}
 
 
@@ -299,6 +317,11 @@ def restart(session: str) -> Ack:
     DB connections and loaded data)."""
     s = _sessions.pop(session, None)
     if s is not None:
+        if s.job_id:
+            try:
+                subprocess.run(["scancel", s.job_id], timeout=10, capture_output=True)
+            except Exception:
+                pass
         try: s.conn.close()
         except Exception: pass
         try: s.proc.terminate(); s.proc.wait(timeout=2)
@@ -308,11 +331,16 @@ def restart(session: str) -> Ack:
 
 @mcp.tool()
 def session_info(session: str) -> SessionInfo:
-    """Report whether the named R session is running, its pid, and the plot dir."""
+    """Report whether the named R session is running, its pid, the plot dir,
+    and (slurm mode) the compute-node job id / node / transport."""
     s = _sessions.get(session)
     running = s is not None and s.proc.poll() is None
     return SessionInfo(session=session, running=running,
-                       pid=s.proc.pid if running else None, plot_dir=_common.plot_dir())
+                       pid=s.proc.pid if running else None,
+                       plot_dir=_common.plot_dir(),
+                       job_id=s.job_id if running else None,
+                       node=s.node if running else None,
+                       transport=s.transport if running else None)
 
 
 if __name__ == "__main__":

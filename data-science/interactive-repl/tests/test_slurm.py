@@ -229,3 +229,40 @@ async def test_slurm_python_token_mismatch_rejected(monkeypatch, tmp_path):
         sc = r.structured_content
         assert sc["error"] is not None
         assert "token mismatch" in sc["error"]
+
+
+@pytest.mark.asyncio
+async def test_slurm_r_end_to_end(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    monkeypatch.setenv("INTERACTIVE_REPL_SLURM", "--partition=test -c 4")
+    monkeypatch.setenv("INTERACTIVE_REPL_HOST", "127.0.0.1")
+    _install_shims(tmp_path, monkeypatch)
+    from mcp import Client
+    from r_repl_server import mcp
+    async with Client(mcp) as client:
+        r = await client.call_tool("run_code", {"session": "slr1", "code": "1 + 1"})
+        sc = r.structured_content
+        assert sc["error"] is None
+        assert "2" in sc["stdout"]
+        si = (await client.call_tool("session_info", {"session": "slr1"})).structured_content
+        assert si["job_id"] == "4242"
+        assert si["node"] == "cn042"
+        assert si["transport"] == "direct"
+        assert "srun" in (tmp_path / "srun.log").read_text()
+
+
+@pytest.mark.asyncio
+async def test_slurm_r_restart_scancels(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    monkeypatch.setenv("INTERACTIVE_REPL_SLURM", "-c 4")
+    monkeypatch.setenv("INTERACTIVE_REPL_HOST", "127.0.0.1")
+    _install_shims(tmp_path, monkeypatch)
+    from mcp import Client
+    from r_repl_server import mcp
+    async with Client(mcp) as client:
+        await client.call_tool("run_code", {"session": "slr2", "code": "x <- 1"})
+        r = await client.call_tool("restart", {"session": "slr2"})
+        assert r.structured_content["ok"] is True
+        assert "4242" in (tmp_path / "scancel.log").read_text()
+        r2 = await client.call_tool("run_code", {"session": "slr2", "code": "x"})
+        assert r2.structured_content["error"] is not None  # object not found after restart
