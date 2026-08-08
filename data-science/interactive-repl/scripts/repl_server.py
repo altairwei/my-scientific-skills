@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# data-science/interactive-repl/scripts/python_repl_server.py
+# data-science/interactive-repl/scripts/repl_server.py
 # /// script
 # requires-python = ">=3.10"
 # dependencies = ["mcp", "pydantic"]
@@ -46,6 +46,7 @@ def _parse_session(name: str):
     """'r:lmp' -> ('r', 'lmp'); 'py:lmp' -> ('py', 'lmp'); anything else -> None."""
     if ":" in name:
         lang, _, bare = name.partition(":")
+        bare = bare.strip()  # "r: " -> None; "r:  lmp " -> ("r", "lmp")
         if lang in _LANGUAGE_PREFIXES and bare:
             return lang, bare
     return None
@@ -85,9 +86,6 @@ class RunChunkResult(BaseModel):
     failed_chunk: ChunkRan | None = None
 
 
-_LANG = "python"
-
-
 class SessionInfo(BaseModel):
     session: str
     running: bool
@@ -96,6 +94,7 @@ class SessionInfo(BaseModel):
     job_id: str | None = None
     node: str | None = None
     transport: str = "local"
+    error: str | None = None
 
 
 class Ack(BaseModel):
@@ -113,6 +112,7 @@ class VarSummary(BaseModel):
 
 class VarList(BaseModel):
     variables: list[VarSummary]
+    error: str | None = None
 
 
 class InspectResult(BaseModel):
@@ -141,7 +141,7 @@ class WorkerModeInfo(BaseModel):
 # Defines a tiny _sz helper (underscore-prefixed → filtered from its own listing),
 # then prints a JSON list of {name,type,size,preview,has_children} for non-underscore
 # globals. exec semantics (no auto-print) → explicit print().
-_LIST_VARS_CODE = (
+_LIST_VARS_PY = (
     "import json as _j\n"
     "def _sz(v):\n"
     "    try:\n"
@@ -156,9 +156,22 @@ _LIST_VARS_CODE = (
 )
 
 
-def _base_sidecar_src() -> str:
-    """The base kernel.py sidecar (peek/who/fig) — auto-injected at session start."""
-    p = HERE / "kernel.py"
+# The language-specific core, keyed by session-name prefix. Everything else in
+# this file is shared glue (session pool, proxying, capping, slurm). The "r"
+# entry is added in Task 3.
+_LANGUAGES = {
+    "py": {
+        "cmd": lambda: [sys.executable, str(WORKER)],
+        "tcp": False,                  # stdio JSON lines
+        "list_vars": _LIST_VARS_PY,
+        "sidecar": "kernel.py",
+    },
+}
+
+
+def _base_sidecar_src(lang: str) -> str:
+    """The base sidecar (kernel.py / kernel.R) — auto-injected at session start."""
+    p = HERE / _LANGUAGES[lang]["sidecar"]
     return p.read_text() if p.exists() else ""
 
 
@@ -185,40 +198,66 @@ def _recv(s: _Session) -> str:
     return line
 
 
-def _start(session: str) -> _Session:
+def _start(lang: str, bare: str) -> _Session:
+    spec = _LANGUAGES[lang]
+    cmd = spec["cmd"]()
     if _slurm.slurm_enabled():
-        proc, conn, meta = _slurm.launch_remote([sys.executable, str(WORKER)])
+        proc, conn, meta = _slurm.launch_remote(cmd)
         s = _Session(proc, conn, meta["job_id"], meta["node"], meta["transport"])
+    elif spec["tcp"]:
+        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        srv.settimeout(30)
+        port = srv.getsockname()[1]
+        env = {**os.environ, "REPL_PORT": str(port)}
+        proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True)
+        conn, _ = srv.accept()
+        srv.close()  # accepted conn is independent of the listener
+        buf = b""
+        while not buf.endswith(b"\n"):
+            buf += conn.recv(65536)
+        ready = json.loads(buf.decode())
+        if not ready.get("ready"):
+            raise RuntimeError(f"R worker failed to start: {ready!r} {proc.stderr.read()!r}")
+        s = _Session(proc, conn)
     else:
-        p = subprocess.Popen(
-            [sys.executable, str(WORKER)],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, bufsize=1,
-        )
+        p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, text=True, bufsize=1)
         ready = json.loads(p.stdout.readline())
         if not ready.get("ready"):
             raise RuntimeError(f"worker failed to start: {ready!r} {p.stderr.read()!r}")
         s = _Session(p)
     # Auto-inject the base sidecar so _peek/_who/_fig are available immediately.
-    base = _base_sidecar_src()
+    base = _base_sidecar_src(lang)
     if base:
         _send(s, _common.encode_line({"id": "init", "code": base}))
         _recv(s)  # discard the init response
     return s
 
 
-def _get(session: str) -> _Session:
-    s = _sessions.get(session)
+def _get(lang: str, bare: str) -> _Session:
+    key = f"{lang}:{bare}"
+    s = _sessions.get(key)
     if s is None or s.proc.poll() is not None:
-        s = _start(session)
-        _sessions[session] = s
+        s = _start(lang, bare)
+        _sessions[key] = s
     return s
 
 
+_AMBIG = "ambiguous session name — use 'r:<name>' or 'py:<name>'"
+
+
 def _call_worker(session: str, code: str) -> dict:
+    parsed = _parse_session(session)
+    if parsed is None:
+        return {"stdout": "", "stderr": "", "error": _AMBIG,
+                "plots": [], "truncated": False, "degraded": False}
+    lang, bare = parsed
     rid = uuid.uuid4().hex
     try:
-        s = _get(session)
+        s = _get(lang, bare)
         _send(s, _common.encode_line({"id": rid, "code": code}))
         line = _recv(s)
     except (BrokenPipeError, OSError) as e:
@@ -248,10 +287,11 @@ def _to_run_result(r: dict) -> RunResult:
 
 @mcp.tool()
 def run_code(session: str, code: str, timeout: int = 300) -> RunResult:
-    """Execute Python code in a persistent REPL session. Variables, imports, and
-    loaded data persist across calls. Returns stdout, stderr, error (traceback or
-    None), plots (saved-PNG paths), and truncated/degraded flags. The session is
-    auto-created on first call. Use distinct session names per task.
+    """Execute code in a persistent REPL session — R or Python. The session
+    name carries the language: 'r:<name>' for R, 'py:<name>' for Python
+    (auto-created on first call). Variables, imports, and loaded data persist
+    across calls. Returns stdout, stderr, error (traceback or condition), plots
+    (saved-PNG paths), and truncated/degraded flags.
 
     The `timeout` parameter is advisory in v1 — the worker blocks until the code
     returns; a stuck cell surfaces as a worker-died error (call `restart`)."""
@@ -265,6 +305,12 @@ def run_chunk(session: str, file: str, selector: str) -> RunChunkResult:
     notebook order via the session worker. Skips eval=FALSE and wrong-language chunks
     (listed in `skipped`). Stops on first error (dependency order). Pass an absolute
     `file` path — the server's cwd may differ from the agent's."""
+    parsed = _parse_session(session)
+    if parsed is None:
+        return RunChunkResult(stdout="", stderr="", error=_AMBIG)
+    lang, bare = parsed
+    if lang == "py":
+        lang = "python"  # chunk parser's language vocabulary is 'r' | 'python'
     try:
         chunks = _chunk_parser.parse_notebook(file)
     except (FileNotFoundError, ValueError) as e:
@@ -294,10 +340,10 @@ def run_chunk(session: str, file: str, selector: str) -> RunChunkResult:
             skipped.append(ChunkSkipped(index=c.index, label=c.label,
                                         language=c.language, reason="eval=FALSE"))
             continue
-        if c.language != _LANG:
-            other = "r-repl" if _LANG == "python" else "python-repl"
+        if c.language != lang:
+            other = "py" if lang == "r" else "r"
             skipped.append(ChunkSkipped(index=c.index, label=c.label, language=c.language,
-                                        reason=f"language={c.language}, use {other}"))
+                                        reason=f"language={c.language}, use {other}:<name>"))
             continue
         r = _call_worker(session, c.code)
         if r.get("error"):
@@ -324,6 +370,8 @@ def run_chunk(session: str, file: str, selector: str) -> RunChunkResult:
 def session_info(session: str) -> SessionInfo:
     """Report whether the named session is running, its pid, the plot dir, and
     (slurm mode) the compute-node job id / node / transport."""
+    if _parse_session(session) is None:
+        return SessionInfo(session=session, running=False, error=_AMBIG)
     s = _sessions.get(session)
     running = s is not None and s.proc.poll() is None
     return SessionInfo(session=session, running=running,
@@ -368,6 +416,8 @@ def restart(session: str) -> Ack:
     In slurm mode this scancels the allocation and resubmits under the
     current worker mode. Use after a worker crash or to deliberately reset
     state. Loses DB connections and loaded data, so use sparingly."""
+    if _parse_session(session) is None:
+        return Ack(ok=False, message=_AMBIG)
     s = _sessions.pop(session, None)
     if s is not None:
         if s.job_id:
@@ -392,14 +442,18 @@ def restart(session: str) -> Ack:
 @mcp.tool()
 def list_variables(session: str) -> VarList:
     """List variables in the session namespace with type/size/preview summaries."""
-    r = _call_worker(session, _LIST_VARS_CODE)
+    parsed = _parse_session(session)
+    if parsed is None:
+        return VarList(variables=[], error=_AMBIG)
+    lang, bare = parsed
+    r = _call_worker(session, _LANGUAGES[lang]["list_vars"])
     if r.get("error"):
-        return VarList(variables=[])
+        return VarList(variables=[], error=r["error"])
     try:
-        parsed = json.loads(r["stdout"].strip().split("\n")[-1])
-        return VarList(variables=[VarSummary(**v) for v in parsed])
+        out = json.loads(r["stdout"].strip().split("\n")[-1])
+        return VarList(variables=[VarSummary(**v) for v in out])
     except Exception:
-        return VarList(variables=[])
+        return VarList(variables=[], error="could not parse variable listing")
 
 
 @mcp.tool()
@@ -415,9 +469,9 @@ def inspect_variable(session: str, name: str, path: list = None) -> InspectResul
 
 @mcp.tool()
 def inject(session: str, path: str) -> Ack:
-    """Exec a kernel.py sidecar into the session namespace — the extensibility
-    mechanism for other skills. The sidecar should be top-level definitions only
-    (lazy imports), no side-effect code at load."""
+    """Exec a kernel.py / kernel.R sidecar into the session namespace — the
+    extensibility mechanism for other skills. The sidecar should be top-level
+    definitions only (lazy imports), no side-effect code at load."""
     with open(path, "r") as f:
         code = f.read()
     r = _call_worker(session, code)
