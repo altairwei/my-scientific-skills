@@ -201,6 +201,26 @@ async def test_slurm_python_restart_scancels(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_slurm_python_close_scancels(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    monkeypatch.setenv("INTERACTIVE_REPL_SLURM", "-c 4")
+    monkeypatch.setenv("INTERACTIVE_REPL_HOST", "127.0.0.1")
+    _install_shims(tmp_path, monkeypatch)
+    from mcp import Client
+    from repl_server import mcp
+    async with Client(mcp) as client:
+        await client.call_tool("run_code", {"session": "py:slc1", "code": "x = 1"})
+        r = await client.call_tool("close", {"session": "py:slc1"})
+        assert r.structured_content["ok"] is True
+        assert "4242" in (tmp_path / "scancel.log").read_text()
+        si = (await client.call_tool("session_info", {"session": "py:slc1"})).structured_content
+        assert si["running"] is False
+        # a fresh run_code on the same name starts a new allocation
+        r2 = await client.call_tool("run_code", {"session": "py:slc1", "code": "x"})
+        assert r2.structured_content["error"] is not None  # NameError after close
+
+
+@pytest.mark.asyncio
 async def test_slurm_python_token_mismatch_rejected(monkeypatch, tmp_path):
     """A worker that returns the wrong token must be refused (shared login
     node: an open port is an injection risk)."""

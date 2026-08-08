@@ -318,6 +318,30 @@ def _call_worker(session: str, code: str) -> dict:
     return _common.decode_line(line)
 
 
+def _kill(s: _Session) -> bool:
+    """Teardown one session's worker: scancel (slurm), close the transport,
+    terminate the process. Returns True if a live worker was killed."""
+    if s.proc.poll() is not None:
+        return False
+    if s.job_id:
+        try:
+            subprocess.run(["scancel", s.job_id], timeout=10, capture_output=True)
+        except Exception:
+            pass
+    try:
+        if s.conn is not None:
+            s.conn.close()
+        else:
+            s.proc.stdin.close()
+    except Exception:
+        pass
+    try:
+        s.proc.terminate(); s.proc.wait(timeout=2)
+    except Exception:
+        pass
+    return True
+
+
 def _to_run_result(r: dict) -> RunResult:
     return RunResult(
         stdout=r.get("stdout", ""),
@@ -474,23 +498,26 @@ def restart(session: str) -> Ack:
     lang, bare = parsed
     s = _sessions.pop(f"{lang}:{bare}", None)
     if s is not None:
-        if s.job_id:
-            try:
-                subprocess.run(["scancel", s.job_id], timeout=10, capture_output=True)
-            except Exception:
-                pass
-        try:
-            if s.conn is not None:
-                s.conn.close()
-            else:
-                s.proc.stdin.close()
-        except Exception:
-            pass
-        try:
-            s.proc.terminate(); s.proc.wait(timeout=2)
-        except Exception:
-            pass
+        _kill(s)
     return Ack(ok=True, message=f"restarted session '{session}'")
+
+
+@mcp.tool()
+def close(session: str) -> Ack:
+    """Kill the named session's worker and release it — scancels the slurm
+    allocation, closes the transport, terminates the process. Unlike restart,
+    the worker is NOT respawned: the next run_code on this name starts a
+    fresh session with an empty namespace. Never creates a session — closing
+    a name that isn't running is a no-op success. Sessions are never
+    auto-closed; call close when the task is done."""
+    parsed = _parse_session(session)
+    if parsed is None:
+        return Ack(ok=False, message=_AMBIG)
+    lang, bare = parsed
+    s = _sessions.pop(f"{lang}:{bare}", None)
+    if s is not None and _kill(s):
+        return Ack(ok=True, message=f"closed session '{session}'")
+    return Ack(ok=True, message=f"no running session '{session}'")
 
 
 @mcp.tool()

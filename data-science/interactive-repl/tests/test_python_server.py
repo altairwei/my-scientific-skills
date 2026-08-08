@@ -203,3 +203,71 @@ async def test_run_chunk_run_from(monkeypatch, tmp_path):
         assert sc["error"] is None
         assert [c["index"] for c in sc["ran"]] == [2]
         assert sorted(c["index"] for c in sc["skipped"]) == [3, 4]
+
+
+@pytest.mark.asyncio
+async def test_close_kills_and_evicts(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from repl_server import mcp, _sessions
+    async with Client(mcp) as client:
+        await client.call_tool("run_code", {"session": "py:cl1", "code": "x = 1"})
+        assert "py:cl1" in _sessions
+        ack = await client.call_tool("close", {"session": "py:cl1"})
+        assert ack.structured_content["ok"] is True
+        assert "closed session" in ack.structured_content["message"]
+        assert "py:cl1" not in _sessions
+        info = await client.call_tool("session_info", {"session": "py:cl1"})
+        assert info.structured_content["running"] is False
+        assert info.structured_content["pid"] is None
+
+
+@pytest.mark.asyncio
+async def test_close_then_run_code_is_fresh_namespace(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from repl_server import mcp
+    async with Client(mcp) as client:
+        await client.call_tool("run_code", {"session": "py:cl2", "code": "z = 99"})
+        await client.call_tool("close", {"session": "py:cl2"})
+        r = await client.call_tool("run_code", {"session": "py:cl2", "code": "z"})
+        assert r.structured_content["error"] is not None  # NameError after close
+
+
+@pytest.mark.asyncio
+async def test_close_idempotent_never_started(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from repl_server import mcp
+    async with Client(mcp) as client:
+        ack = await client.call_tool("close", {"session": "py:ghost"})
+        assert ack.structured_content["ok"] is True
+        assert "no running session" in ack.structured_content["message"]
+        info = await client.call_tool("session_info", {"session": "py:ghost"})
+        assert info.structured_content["running"] is False
+
+
+@pytest.mark.asyncio
+async def test_close_ambiguous_name_rejected(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from repl_server import mcp
+    async with Client(mcp) as client:
+        ack = await client.call_tool("close", {"session": "lmp"})
+        assert ack.structured_content["ok"] is False
+        assert "ambiguous session name" in ack.structured_content["message"]
+
+
+@pytest.mark.asyncio
+async def test_close_does_not_affect_other_sessions(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from repl_server import mcp
+    async with Client(mcp) as client:
+        await client.call_tool("run_code", {"session": "py:cl3", "code": "a = 1"})
+        await client.call_tool("run_code", {"session": "py:cl4", "code": "b = 2"})
+        ack = await client.call_tool("close", {"session": "py:cl3"})
+        assert ack.structured_content["ok"] is True
+        r = await client.call_tool("run_code", {"session": "py:cl4", "code": "b"})
+        assert r.structured_content["error"] is None
+        assert "2" in r.structured_content["stdout"]
