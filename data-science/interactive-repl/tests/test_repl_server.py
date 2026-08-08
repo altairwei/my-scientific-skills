@@ -91,3 +91,17 @@ async def test_session_name_whitespace_normalized(monkeypatch, tmp_path):
         await client.call_tool("run_code", {"session": "py:ws", "code": "x = 1"})
         r = await client.call_tool("session_info", {"session": "py:ws "})
         assert r.structured_content["running"] is True
+
+
+@pytest.mark.asyncio
+async def test_r_session_roundtrip(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from repl_server import mcp
+    async with Client(mcp) as client:
+        r = await client.call_tool("run_code", {"session": "r:s1", "code": "x <- 6; x * 7"})
+        sc = r.structured_content
+        assert sc["error"] is None, sc["error"]
+        assert "42" in sc["stdout"]
+        r = await client.call_tool("run_code", {"session": "r:s1", "code": "x + 1"})
+        assert "7" in r.structured_content["stdout"]

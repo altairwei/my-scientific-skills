@@ -15,6 +15,7 @@ from mcp.server import MCPServer
 
 HERE = Path(__file__).resolve().parent
 WORKER = HERE / "python_worker.py"
+REPL_R = HERE / "repl.R"
 sys.path.insert(0, str(HERE))
 import _common  # noqa: E402
 import _chunk_parser  # noqa: E402
@@ -153,9 +154,28 @@ _LIST_VARS_PY = (
 )
 
 
+# R code injected to list .GlobalEnv objects as JSON. lapply + jsonlite::toJSON.
+_LIST_VARS_R = (
+    "objs <- lapply(ls(envir=.GlobalEnv), function(nm) {"
+    "  o <- get(nm, envir=.GlobalEnv); dm <- dim(o);"
+    "  list(name=nm, type=class(o)[1],"
+    "       size=if(is.null(dm)) as.character(length(o)) else paste(dm, collapse='x'),"
+    "       preview='',"
+    "       has_children=is.recursive(o) && length(o) > 0)"
+    "}); cat(jsonlite::toJSON(objs, auto_unbox=TRUE, null='null'))"
+)
+
+
+def _r_worker_cmd() -> list:
+    r_env = os.environ.get("INTERACTIVE_REPL_R_ENV")
+    r_bin = os.environ.get("INTERACTIVE_REPL_R_BIN", "R")
+    argv = [r_bin, "--no-save", "--no-restore", "-f", str(REPL_R)]
+    return (["conda", "run", "-n", r_env, "--no-capture-output", *argv]
+            if r_env else argv)
+
+
 # The language-specific core, keyed by session-name prefix. Everything else in
-# this file is shared glue (session pool, proxying, capping, slurm). The "r"
-# entry is added in Task 3.
+# this file is shared glue (session pool, proxying, capping, slurm).
 _LANGUAGES = {
     "py": {
         "cmd": lambda: [sys.executable, str(WORKER)],
@@ -163,11 +183,17 @@ _LANGUAGES = {
         "list_vars": _LIST_VARS_PY,
         "sidecar": "kernel.py",
     },
+    "r": {
+        "cmd": _r_worker_cmd,
+        "tcp": True,                   # R base socketConnection is TCP-only
+        "list_vars": _LIST_VARS_R,
+        "sidecar": "kernel.R",
+    },
 }
 
 # Valid session-name prefixes are exactly the registry keys — a language that
 # isn't in _LANGUAGES yet parses as None and surfaces the structured ambiguity
-# error instead of a KeyError. ("r" joins the registry in Task 3.)
+# error instead of a KeyError.
 _LANGUAGE_PREFIXES = set(_LANGUAGES)
 
 
@@ -326,7 +352,10 @@ def run_chunk(session: str, file: str, selector: str) -> RunChunkResult:
     # (pd.read_csv("data.csv"), open("helper.py") — relative to the notebook, not the
     # server's launch dir).
     nb_dir = str(Path(file).resolve().parent)
-    r = _call_worker(session, f"import os; os.chdir({nb_dir!r})")
+    if lang == "python":  # chunk parser vocabulary, see normalization above
+        r = _call_worker(session, f"import os; os.chdir({nb_dir!r})")
+    else:
+        r = _call_worker(session, f"setwd({nb_dir!r})")
     if r.get("error"):
         return RunChunkResult(stdout="", stderr="", error=f"os.chdir({nb_dir}) failed: {r['error']}")
 
