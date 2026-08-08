@@ -30,9 +30,17 @@ A dry-run confirms the DAG builds and shells render, but it does **not** execute
 
 Do not loop retries. Reproduce on a small slice (proves it's not scale-related), then substitute an equivalent and **validate equivalence** against the original before declaring success. Example: `vcftools --TsTv-by-count` glibc-heap-corrupted on multiallelic + `*` alleles with `Number=A` INFO fields — replaced with `bcftools query -f '%REF\t%ALT\t%AC\n' | awk -f workflow/scripts/tstv_by_count.awk`, validated 938/938 bins identical to vcftools.
 
-## Debugging aids
+## Where are the logs (find them before guessing)
 
-- Log files in `.snakemake/log/` mirror the console; essential for non-interactive runs.
+When a job fails, logs live in three places — check them in this order:
+
+1. **The rule's own `log:` files — first place to look.** Every rule declares `log: "logs/..."`; the rule's command is expected to redirect output there (`> {log} 2>&1`). **Snakemake never deletes log files on failure** — that is their purpose. To find them: read the failing rule's `log:` directive (e.g., `logs/{sample}/<rule>.log`), or `find logs -name "*.log"`. Runs often write rule logs under a timestamped directory (in the WGS pipeline: `logs/<YYYYMMDD_HHMMSS>/<rule>/<file>.log`).
+2. **The main snakemake process log — for workflow-level problems.** `.snakemake/log/<timestamp>.<runid>.snakemake.log`, one per run, mirroring the console. Find the latest with `ls -t .snakemake/log/*.snakemake.log | head -1`. Essential when the run was non-interactive (background orchestrator, cluster job, container). The debug flow greps it for `Error in rule`, `SLURM status is: '...'`, `Traceback`, `WorkflowError`.
+3. **Executor-plugin (SLURM/HPC) job logs — for scheduler-level verdicts.** The slurm executor plugin writes per-job submission output to a directory configured in the profile/plugin settings (in the WGS pipeline: `logs/slurm/rule_<rulename>/<jobid>.log`, via `{rule}`/`{jobid}` placeholders) — **read the profile to find the configured location**. When the rule's own log is empty or clean, the SLURM job log carries the scheduler verdict: `OUT_OF_MEMORY`, `TIME_LIMIT`, exit codes. Also check the rendered jobscript (the plugin writes it under `.snakemake/`) to see exactly what was submitted, and `sacct -j <jobid>` for the scheduler state.
+4. **Make the failure visible.** `--show-failed-logs` automatically displays the logs of failed jobs at the end of the run; `--printshellcmds` (`-p`) prints the exact shell command each job ran — confirming what actually executed (e.g., whether a `-Xmx`/`mem_mb` change reached the job).
+
+## Other debugging aids
+
 - `--skip-script-cleanup` — keep wrapper scripts for `script:` rules (default location `.snakemake/scripts/`); inspect what Snakemake actually invoked.
 - Target a single output to shrink the DAG: `snakemake path/to/output.file <args>` (put the target first to avoid `nargs='+'` eating it).
 - `--debug` — drop into PDB for `run:` blocks and Python scripts.

@@ -27,6 +27,7 @@ These habits separate a reliable workflow from a plausible-looking one. Follow t
 ### Validation
 
 - **Run the dry-run loop after every generation/edit.** Run `scripts/validate-workflow.py` (which runs `snakemake -n --cores 1`), read the real stderr, fix, retry. After 2–3 failed fixes on the same error, stop and report the diagnosis — do not loop silently.
+- **Locate the failed job's log before guessing.** Check in order: the rule's `log:` file (never deleted on failure) → the main `.snakemake/log/` process log → the executor-plugin (SLURM) job logs. See `references/debugging.md`.
 - **Never declare done until `snakemake -n` passes** (or, with the static fallback, the output is explicitly flagged "unvalidated").
 
 ### Recovery (the high-frequency mistakes)
