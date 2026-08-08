@@ -167,13 +167,13 @@ async def test_slurm_python_end_to_end(monkeypatch, tmp_path):
     monkeypatch.setenv("INTERACTIVE_REPL_HOST", "127.0.0.1")  # loopback in tests
     _install_shims(tmp_path, monkeypatch)
     from mcp import Client
-    from python_repl_server import mcp
+    from repl_server import mcp
     async with Client(mcp) as client:
-        r = await client.call_tool("run_code", {"session": "slp1", "code": "1 + 1"})
+        r = await client.call_tool("run_code", {"session": "py:slp1", "code": "1 + 1"})
         sc = r.structured_content
         assert sc["error"] is None
         assert "2" in sc["stdout"]
-        si = (await client.call_tool("session_info", {"session": "slp1"})).structured_content
+        si = (await client.call_tool("session_info", {"session": "py:slp1"})).structured_content
         assert si["job_id"] == "4242"
         assert si["node"] == "cn042"
         assert si["transport"] == "direct"
@@ -189,14 +189,14 @@ async def test_slurm_python_restart_scancels(monkeypatch, tmp_path):
     monkeypatch.setenv("INTERACTIVE_REPL_HOST", "127.0.0.1")
     _install_shims(tmp_path, monkeypatch)
     from mcp import Client
-    from python_repl_server import mcp
+    from repl_server import mcp
     async with Client(mcp) as client:
-        await client.call_tool("run_code", {"session": "slp2", "code": "x = 1"})
-        r = await client.call_tool("restart", {"session": "slp2"})
+        await client.call_tool("run_code", {"session": "py:slp2", "code": "x = 1"})
+        r = await client.call_tool("restart", {"session": "py:slp2"})
         assert r.structured_content["ok"] is True
         assert "4242" in (tmp_path / "scancel.log").read_text()
         # session restarted: namespace wiped, new session works
-        r2 = await client.call_tool("run_code", {"session": "slp2", "code": "x"})
+        r2 = await client.call_tool("run_code", {"session": "py:slp2", "code": "x"})
         assert r2.structured_content["error"] is not None  # NameError after restart
 
 
@@ -217,10 +217,10 @@ async def test_slurm_python_token_mismatch_rejected(monkeypatch, tmp_path):
     wrong.write_text(head + 'export REPL_TOKEN=wrongtoken\nexec "$@"\n')
     wrong.chmod(0o755)
     from mcp import Client
-    from python_repl_server import mcp
+    from repl_server import mcp
     async with Client(mcp) as client:
         # session-start failures are structured errors, not tool-level failures
-        r = await client.call_tool("run_code", {"session": "slp3", "code": "1"})
+        r = await client.call_tool("run_code", {"session": "py:slp3", "code": "1"})
         sc = r.structured_content
         assert sc["error"] is not None
         assert "token mismatch" in sc["error"]
@@ -233,13 +233,13 @@ async def test_slurm_r_end_to_end(monkeypatch, tmp_path):
     monkeypatch.setenv("INTERACTIVE_REPL_HOST", "127.0.0.1")
     _install_shims(tmp_path, monkeypatch)
     from mcp import Client
-    from r_repl_server import mcp
+    from repl_server import mcp
     async with Client(mcp) as client:
-        r = await client.call_tool("run_code", {"session": "slr1", "code": "1 + 1"})
+        r = await client.call_tool("run_code", {"session": "r:slr1", "code": "1 + 1"})
         sc = r.structured_content
         assert sc["error"] is None
         assert "2" in sc["stdout"]
-        si = (await client.call_tool("session_info", {"session": "slr1"})).structured_content
+        si = (await client.call_tool("session_info", {"session": "r:slr1"})).structured_content
         assert si["job_id"] == "4242"
         assert si["node"] == "cn042"
         assert si["transport"] == "direct"
@@ -253,13 +253,13 @@ async def test_slurm_r_restart_scancels(monkeypatch, tmp_path):
     monkeypatch.setenv("INTERACTIVE_REPL_HOST", "127.0.0.1")
     _install_shims(tmp_path, monkeypatch)
     from mcp import Client
-    from r_repl_server import mcp
+    from repl_server import mcp
     async with Client(mcp) as client:
-        await client.call_tool("run_code", {"session": "slr2", "code": "x <- 1"})
-        r = await client.call_tool("restart", {"session": "slr2"})
+        await client.call_tool("run_code", {"session": "r:slr2", "code": "x <- 1"})
+        r = await client.call_tool("restart", {"session": "r:slr2"})
         assert r.structured_content["ok"] is True
         assert "4242" in (tmp_path / "scancel.log").read_text()
-        r2 = await client.call_tool("run_code", {"session": "slr2", "code": "x"})
+        r2 = await client.call_tool("run_code", {"session": "r:slr2", "code": "x"})
         assert r2.structured_content["error"] is not None  # object not found after restart
 
 
@@ -325,13 +325,13 @@ async def test_tunnel_python_end_to_end(monkeypatch, tmp_path):
     (tmp_path / "ssh").write_text(FAKE_SSH)
     (tmp_path / "ssh").chmod(0o755)
     from mcp import Client
-    from python_repl_server import mcp
+    from repl_server import mcp
     async with Client(mcp) as client:
-        r = await client.call_tool("run_code", {"session": "tun1", "code": "1 + 1"})
+        r = await client.call_tool("run_code", {"session": "py:tun1", "code": "1 + 1"})
         sc = r.structured_content
         assert sc["error"] is None
         assert "2" in sc["stdout"]
-        si = (await client.call_tool("session_info", {"session": "tun1"})).structured_content
+        si = (await client.call_tool("session_info", {"session": "py:tun1"})).structured_content
         assert si["transport"] == "tunnel"
         assert si["job_id"] == "4242"
         # the tunnel must actually be used — the naive worker would connect
@@ -349,13 +349,13 @@ async def test_tunnel_r_end_to_end(monkeypatch, tmp_path):
     (tmp_path / "ssh").write_text(FAKE_SSH)
     (tmp_path / "ssh").chmod(0o755)
     from mcp import Client
-    from r_repl_server import mcp
+    from repl_server import mcp
     async with Client(mcp) as client:
-        r = await client.call_tool("run_code", {"session": "tun2", "code": "1 + 1"})
+        r = await client.call_tool("run_code", {"session": "r:tun2", "code": "1 + 1"})
         sc = r.structured_content
         assert sc["error"] is None
         assert "2" in sc["stdout"]
-        si = (await client.call_tool("session_info", {"session": "tun2"})).structured_content
+        si = (await client.call_tool("session_info", {"session": "r:tun2"})).structured_content
         assert si["transport"] == "tunnel"
         assert "-L" in (tmp_path / "ssh.log").read_text()
 
@@ -366,7 +366,7 @@ async def test_worker_mode_probe_defaults(monkeypatch, tmp_path):
     monkeypatch.delenv("INTERACTIVE_REPL_SLURM", raising=False)
     monkeypatch.delenv("INTERACTIVE_REPL_TRANSPORT", raising=False)
     from mcp import Client
-    from python_repl_server import mcp
+    from repl_server import mcp
     async with Client(mcp) as client:
         r = await client.call_tool("worker_mode", {})
         sc = r.structured_content
@@ -382,7 +382,7 @@ async def test_worker_mode_switch_routes_new_sessions(monkeypatch, tmp_path):
     monkeypatch.setenv("INTERACTIVE_REPL_HOST", "127.0.0.1")
     _install_shims(tmp_path, monkeypatch)
     from mcp import Client
-    from python_repl_server import mcp
+    from repl_server import mcp
     async with Client(mcp) as client:
         r = await client.call_tool("worker_mode", {"mode": "slurm", "slurm_flags": "--partition=test"})
         sc = r.structured_content
@@ -390,8 +390,8 @@ async def test_worker_mode_switch_routes_new_sessions(monkeypatch, tmp_path):
         assert sc["source"] == "tool"
         assert sc["slurm_flags"] == "--partition=test"
         # new session goes through srun
-        await client.call_tool("run_code", {"session": "wm1", "code": "1 + 1"})
-        si = (await client.call_tool("session_info", {"session": "wm1"})).structured_content
+        await client.call_tool("run_code", {"session": "py:wm1", "code": "1 + 1"})
+        si = (await client.call_tool("session_info", {"session": "py:wm1"})).structured_content
         assert si["job_id"] == "4242"
         assert "--partition=test" in (tmp_path / "srun.log").read_text()
 
@@ -403,12 +403,12 @@ async def test_worker_mode_local_overrides_env(monkeypatch, tmp_path):
     monkeypatch.setenv("INTERACTIVE_REPL_SLURM", "--partition=env")
     _install_shims(tmp_path, monkeypatch)
     from mcp import Client
-    from python_repl_server import mcp
+    from repl_server import mcp
     async with Client(mcp) as client:
         r = await client.call_tool("worker_mode", {"mode": "local"})
         assert r.structured_content["mode"] == "local"
-        await client.call_tool("run_code", {"session": "wm2", "code": "1 + 1"})
-        si = (await client.call_tool("session_info", {"session": "wm2"})).structured_content
+        await client.call_tool("run_code", {"session": "py:wm2", "code": "1 + 1"})
+        si = (await client.call_tool("session_info", {"session": "py:wm2"})).structured_content
         assert si["transport"] == "local"
         assert not (tmp_path / "srun.log").exists()   # no srun was launched
 
@@ -419,15 +419,15 @@ async def test_worker_mode_switch_does_not_affect_existing_sessions(monkeypatch,
     monkeypatch.setenv("INTERACTIVE_REPL_HOST", "127.0.0.1")
     _install_shims(tmp_path, monkeypatch)
     from mcp import Client
-    from python_repl_server import mcp
+    from repl_server import mcp
     async with Client(mcp) as client:
         await client.call_tool("worker_mode", {"mode": "slurm"})
-        await client.call_tool("run_code", {"session": "wm3", "code": "x = 42"})
+        await client.call_tool("run_code", {"session": "py:wm3", "code": "x = 42"})
         # switch to local — the running session must keep working
         await client.call_tool("worker_mode", {"mode": "local"})
-        r = await client.call_tool("run_code", {"session": "wm3", "code": "x"})
+        r = await client.call_tool("run_code", {"session": "py:wm3", "code": "x"})
         assert "42" in r.structured_content["stdout"]
-        si = (await client.call_tool("session_info", {"session": "wm3"})).structured_content
+        si = (await client.call_tool("session_info", {"session": "py:wm3"})).structured_content
         assert si["transport"] == "direct"      # launched under slurm, still slurm
 
 
@@ -435,7 +435,7 @@ async def test_worker_mode_switch_does_not_affect_existing_sessions(monkeypatch,
 async def test_worker_mode_r_server_smoke(monkeypatch, tmp_path):
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
     from mcp import Client
-    from r_repl_server import mcp
+    from repl_server import mcp
     async with Client(mcp) as client:
         r = await client.call_tool("worker_mode", {})
         sc = r.structured_content

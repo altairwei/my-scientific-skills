@@ -246,17 +246,24 @@ def _start(lang: str, bare: str) -> _Session:
         env = {**os.environ, "REPL_PORT": str(port)}
         proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE, text=True)
+        conn = None
         try:
             conn, _ = srv.accept()
             srv.close()  # accepted conn is independent of the listener
             buf = b""
             while not buf.endswith(b"\n"):
-                buf += conn.recv(65536)
+                chunk = conn.recv(65536)
+                if not chunk:  # worker died before its ready line -> EOF,
+                    raise OSError("connection closed")  # not a silent busy-spin
+                buf += chunk
             ready = json.loads(buf.decode())
             if not ready.get("ready"):
                 raise RuntimeError(f"R worker failed to start: {ready!r} {proc.stderr.read()!r}")
         except Exception:
             proc.terminate()
+            if conn is not None:
+                conn.close()
+            srv.close()
             raise
         s = _Session(proc, conn)
     else:
