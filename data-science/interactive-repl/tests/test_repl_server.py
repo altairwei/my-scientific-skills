@@ -8,7 +8,7 @@ def test_import_smoke():
 
 def test_parse_session_known_prefixes():
     from repl_server import _parse_session
-    assert _parse_session("r:lmp") == ("r", "lmp")
+    assert _parse_session("r:lmp") is None                    # 'r' not registered until Task 3
     assert _parse_session("py:lmp") == ("py", "lmp")
     assert _parse_session("py:abc:def") == ("py", "abc:def")  # bare may contain ':'
     assert _parse_session("r:") is None                       # empty bare name
@@ -17,7 +17,7 @@ def test_parse_session_known_prefixes():
     assert _parse_session("x:lmp") is None                    # unknown prefix
     assert _parse_session("python:lmp") is None               # 'python' is not 'py'
     assert _parse_session("r: ") is None                      # whitespace-only bare name
-    assert _parse_session("r:  lmp ") == ("r", "lmp")         # bare is stripped
+    assert _parse_session("py:  lmp ") == ("py", "lmp")       # bare is stripped
 
 
 @pytest.mark.asyncio
@@ -54,7 +54,7 @@ async def test_ambiguous_name_all_tools(monkeypatch, tmp_path):
     from repl_server import mcp
     async with Client(mcp) as client:
         r = await client.call_tool("run_chunk", {"session": "lmp", "file": "x.Rmd", "selector": "1"})
-        assert r.structured_content["error"] is not None
+        assert "ambiguous" in r.structured_content["error"]
         r = await client.call_tool("restart", {"session": "lmp"})
         assert r.structured_content["ok"] is False
         assert "ambiguous" in r.structured_content["message"]
@@ -64,3 +64,28 @@ async def test_ambiguous_name_all_tools(monkeypatch, tmp_path):
         assert "ambiguous" in r.structured_content["error"]
         r = await client.call_tool("inject", {"session": "lmp", "path": str(sidecar)})
         assert r.structured_content["ok"] is False
+        r = await client.call_tool("inspect_variable", {"session": "lmp", "name": "x"})
+        assert "ambiguous" in r.structured_content["error"]
+
+
+@pytest.mark.asyncio
+async def test_session_info_never_started(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from repl_server import mcp
+    async with Client(mcp) as client:
+        r = await client.call_tool("session_info", {"session": "py:never"})
+        sc = r.structured_content
+        assert sc["running"] is False
+        assert sc["error"] is None
+
+
+@pytest.mark.asyncio
+async def test_session_name_whitespace_normalized(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from repl_server import mcp
+    async with Client(mcp) as client:
+        await client.call_tool("run_code", {"session": "py:ws", "code": "x = 1"})
+        r = await client.call_tool("session_info", {"session": "py:ws "})
+        assert r.structured_content["running"] is True

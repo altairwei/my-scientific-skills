@@ -38,9 +38,6 @@ class _Session:
 
 _sessions: dict[str, _Session] = {}
 
-# Session-name grammar: "<lang>:<name>" — language is a session attribute.
-_LANGUAGE_PREFIXES = {"r", "py"}
-
 
 def _parse_session(name: str):
     """'r:lmp' -> ('r', 'lmp'); 'py:lmp' -> ('py', 'lmp'); anything else -> None."""
@@ -168,6 +165,11 @@ _LANGUAGES = {
     },
 }
 
+# Valid session-name prefixes are exactly the registry keys — a language that
+# isn't in _LANGUAGES yet parses as None and surfaces the structured ambiguity
+# error instead of a KeyError. ("r" joins the registry in Task 3.)
+_LANGUAGE_PREFIXES = set(_LANGUAGES)
+
 
 def _base_sidecar_src(lang: str) -> str:
     """The base sidecar (kernel.py / kernel.R) — auto-injected at session start."""
@@ -261,14 +263,14 @@ def _call_worker(session: str, code: str) -> dict:
         _send(s, _common.encode_line({"id": rid, "code": code}))
         line = _recv(s)
     except (BrokenPipeError, OSError) as e:
-        _sessions.pop(session, None)
+        _sessions.pop(f"{lang}:{bare}", None)
         return {"stdout": "", "stderr": "", "error": f"worker died: {e}",
                 "plots": [], "truncated": False, "degraded": False}
     except RuntimeError as e:
         # session-start failures (queue timeout, token mismatch, worker refused
         # to start) surface as structured errors — raising here hangs the MCP
         # request in the in-process client (exceptions are not auto-converted).
-        _sessions.pop(session, None)
+        _sessions.pop(f"{lang}:{bare}", None)
         return {"stdout": "", "stderr": "", "error": str(e),
                 "plots": [], "truncated": False, "degraded": False}
     return _common.decode_line(line)
@@ -308,7 +310,7 @@ def run_chunk(session: str, file: str, selector: str) -> RunChunkResult:
     parsed = _parse_session(session)
     if parsed is None:
         return RunChunkResult(stdout="", stderr="", error=_AMBIG)
-    lang, bare = parsed
+    lang, _ = parsed
     if lang == "py":
         lang = "python"  # chunk parser's language vocabulary is 'r' | 'python'
     try:
@@ -370,16 +372,18 @@ def run_chunk(session: str, file: str, selector: str) -> RunChunkResult:
 def session_info(session: str) -> SessionInfo:
     """Report whether the named session is running, its pid, the plot dir, and
     (slurm mode) the compute-node job id / node / transport."""
-    if _parse_session(session) is None:
+    parsed = _parse_session(session)
+    if parsed is None:
         return SessionInfo(session=session, running=False, error=_AMBIG)
-    s = _sessions.get(session)
+    lang, bare = parsed
+    s = _sessions.get(f"{lang}:{bare}")
     running = s is not None and s.proc.poll() is None
     return SessionInfo(session=session, running=running,
                        pid=s.proc.pid if running else None,
                        plot_dir=_common.plot_dir(),
                        job_id=s.job_id if running else None,
                        node=s.node if running else None,
-                       transport=s.transport if running else None)
+                       transport=s.transport if running else "local")
 
 
 @mcp.tool()
@@ -416,9 +420,11 @@ def restart(session: str) -> Ack:
     In slurm mode this scancels the allocation and resubmits under the
     current worker mode. Use after a worker crash or to deliberately reset
     state. Loses DB connections and loaded data, so use sparingly."""
-    if _parse_session(session) is None:
+    parsed = _parse_session(session)
+    if parsed is None:
         return Ack(ok=False, message=_AMBIG)
-    s = _sessions.pop(session, None)
+    lang, bare = parsed
+    s = _sessions.pop(f"{lang}:{bare}", None)
     if s is not None:
         if s.job_id:
             try:
