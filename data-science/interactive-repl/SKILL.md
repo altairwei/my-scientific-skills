@@ -102,7 +102,7 @@ languages side by side; just use distinct prefixes.
 - `inspect_variable(session, name, path?)` — drill into a DataFrame's columns / a list's elements.
 - `inject(session, path)` — exec a `kernel.py`/`kernel.R` sidecar into the namespace. Call once when another skill ships a sidecar.
 - `restart(session)` — wipe + respawn the worker. **Rarely** — only after a crash or to deliberately reset (loses DB connections + loaded data).
-- `session_info(session)` — versions, loaded packages, working dir, variable count, and (slurm mode) compute-node job id / node / transport.
+- `session_info(session)` — running state, pid, plot dir, and (slurm mode) compute-node job id / node / transport.
 - `worker_mode(mode?, slurm_flags?, transport?)` — probe or switch how workers launch: `local` (default) vs `slurm` (srun on a compute node). Call it with no args to detect the environment; switch for HPC work. See `references/slurm-hpc.md`.
 
 ## Plots — save and look (necessary, not sufficient)
