@@ -20,7 +20,7 @@ wastes time and breaks the iterate-fast loop. This skill gives you a persistent
 R/Python REPL via two MCP servers (`python-repl`, `r-repl`) so state survives across
 calls.
 
-## Before promising a REPL — is it actually up?
+## Setup — check, then fix (drive it yourself)
 
 The REPL lives in MCP servers; you only have the tools (`run_code`, `run_chunk`,
 `list_variables`, `worker_mode`, …) if the plugin that ships them is installed
@@ -29,30 +29,38 @@ REPL tools are missing, **drive the setup yourself — diagnose and fix what you
 can; hand the user only the steps that genuinely require them**. Do not reply
 with a checklist of commands for the user to run.
 
-Diagnose in this order:
+1. **Tools present?** You see `run_code` / `session_info` / `worker_mode` →
+   probe once (`session_info` on a throwaway session, or `worker_mode()` with
+   no args) and you're set. Missing → continue.
+2. **Dependencies — run the skill's one-shot installer yourself**:
+   `scripts/setup.sh` (idempotent, safe to re-run). It installs `uv` if
+   missing and installs ALL python runtime deps (`mcp pydantic numpy pandas
+   matplotlib`) into the worker's `py-site` in a single `uv pip install
+   --target` — no mid-session lazy-install stalls, and once cached it works
+   offline. Report its output; fix anything it flags.
+3. **R for r-repl — find a usable R** (on HPC it is usually NOT on PATH; see
+   `references/r-setup.md` for the full discovery commands): `command -v
+   Rscript`; `conda env list` then test candidates with `conda run -n <env>
+   Rscript --version`; `module avail` for an R module. You need R **and** the
+   `jsonlite` / `knitr` / `ggplot2` packages (check with `Rscript -e
+   'rownames(installed.packages())'`). When you find one, configure the r-repl
+   server with `INTERACTIVE_REPL_R_ENV` (conda env name) or
+   `INTERACTIVE_REPL_R_BIN` (path to R) — persist it yourself (e.g. append the
+   `export` to `~/.bashrc`) and tell the user to restart Claude Code, because
+   the server reads these at launch. If no R exists anywhere, tell the user the
+   one command to create it (`mamba create -n r-repl -c conda-forge r-base
+   r-jsonlite r-knitr r-ggplot2`).
+4. **Plugin state** — inspect `~/.claude/plugins/…` on disk: marketplace entry
+   present? plugin enabled? If the plugin itself is missing, ask the user to
+   run `/plugin install data-science@my-scientific-skills` (slash commands are
+   user-only) — one command, nothing else.
+5. **Loaded servers never appear mid-session** — MCP servers start once per
+   Claude Code process. If deps and plugin are fine, the remaining user-only
+   step is `/reload-plugins` or a restart. After the user acts, re-verify with
+   `session_info` on both servers before claiming the REPL is usable.
 
-1. **Your own toolset** — do you see `run_code` / `session_info` / `worker_mode`?
-   Yes → probe once (`session_info` on a throwaway session, or `worker_mode`
-   with no args) and proceed; the REPL is live. No → servers are not loaded.
-2. **Dependencies — check with shell commands yourself** (`which uv`, `which R`):
-   - `uv` missing → **install it yourself**: `curl -LsSf
-     https://astral.sh/uv/install.sh | sh`, then verify `~/.local/bin/uv
-     --version`. Scriptable — do it, don't delegate.
-   - `R` missing (r-repl) → system-level install; tell the user (conda/apt),
-     the skill doesn't install R.
-3. **Plugin state — inspect on disk** (`ls ~/.claude/plugins/…`): is the
-   marketplace entry / plugin enabled? If the plugin itself is missing, that
-   needs the user (slash commands are user-only): ask them to run
-   `/plugin install data-science@my-scientific-skills` (add the marketplace
-   first if needed) — one command, nothing else.
-4. **Servers never load mid-session** — MCP servers start once per Claude Code
-   process. If the plugin is installed and deps are present, the remaining
-   user-only step is `/reload-plugins` or a restart. Say exactly that one step,
-   and after the user does it, re-verify with `session_info` before claiming the
-   REPL is usable.
-
-When the user says "set up this skill", the outcome is a working probe — or a
-precise one-step ask with everything else already done.
+When the user says "set up this skill", the outcome is a working probe on both
+servers — or a precise one-step ask with everything else already done.
 
 ## The iterate rule
 

@@ -30,6 +30,13 @@ defined).
 
 ## Missing dependencies
 
+First port of call: **run `scripts/setup.sh`** — the skill's one-shot installer
+(idempotent). It installs `uv` if missing and installs ALL python runtime deps
+(`mcp pydantic numpy pandas matplotlib`) into the worker's `py-site` in a
+single `uv pip install --target`, falling back to `--offline` (uv's wheel
+cache) when the network is bad. Run it once when the network is good and
+sessions start without any mid-session downloads.
+
 - `uv` not installed — or `MCP server failed to start` / `ModuleNotFoundError: No module
   named 'mcp'` — → install `uv` (one line): `curl -LsSf https://astral.sh/uv/install.sh | sh`,
   then **restart Claude Code** so the servers pick up `uv` on `PATH`. The `data-science`
@@ -44,9 +51,9 @@ If `run_code` / `list_variables` / `worker_mode` etc. never appear as available
 tools, the `data-science` plugin's MCP servers are not loaded. The agent should
 diagnose and fix everything scriptable itself, in order:
 
-1. `which uv` / `which R` — missing `uv` is fixable by the agent:
-   `curl -LsSf https://astral.sh/uv/install.sh | sh`. Missing R is
-   system-level; tell the user (`r-setup.md`).
+1. Run `scripts/setup.sh` — installs `uv` (if missing) and all python runtime
+   deps in one shot, and reports the R status. Missing R is system-level; on
+   HPC find a conda env / module with r-base (`r-setup.md`).
 2. Inspect plugin state on disk (`~/.claude/plugins/…`) — marketplace entry
    present? plugin enabled?
 3. Only the truly user-only steps get handed over — one command at a time:

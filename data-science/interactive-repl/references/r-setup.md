@@ -1,5 +1,47 @@
 # R setup — interactive-repl
 
+## Finding R on HPC
+
+On HPC login nodes R is usually NOT on PATH — it lives in a conda env or a
+module. The `r-repl` server launches R per session via
+`INTERACTIVE_REPL_R_ENV` (conda env name → `conda run -n <env>`) or
+`INTERACTIVE_REPL_R_BIN` (path to the R binary). Find a usable one:
+
+```bash
+command -v Rscript                       # on PATH already?
+conda env list                           # conda envs present?
+conda run -n <env> Rscript --version     # test each candidate env
+module avail 2>&1 | grep -i r            # or an R module: module load R
+```
+
+Then check the required packages (jsonlite is REQUIRED; knitr + ggplot2 for
+dt_table/plot capture):
+
+```bash
+conda run -n <env> Rscript -e 'cat(rownames(installed.packages()), sep="\n")' | grep -E '^(jsonlite|knitr|ggplot2)$'
+```
+
+Configure the server (persist in `~/.bashrc` so every Claude Code launch picks
+it up — the server reads these env vars at launch):
+
+```bash
+export INTERACTIVE_REPL_R_ENV=<env>      # conda env name
+# or
+export INTERACTIVE_REPL_R_BIN=/path/to/R # explicit binary
+```
+
+If no env has R, create one (conda-forge has all three packages, no
+compilation):
+
+```bash
+mamba create -n r-repl -c conda-forge r-base r-jsonlite r-knitr r-ggplot2
+export INTERACTIVE_REPL_R_ENV=r-repl
+```
+
+The one-shot installer `scripts/setup.sh` checks the R on PATH (and with `--r`
+installs the packages) — but on HPC you still need to point the server at the
+right env via the env vars above.
+
 ## R + packages
 
 The `r-repl` server spawns `R --no-save --no-restore` running `scripts/repl.R`. It

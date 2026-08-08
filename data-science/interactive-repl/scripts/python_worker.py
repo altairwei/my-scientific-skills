@@ -109,9 +109,12 @@ def _capture_new_figures():
 _LAZY_PKGS = {"numpy": "numpy", "pandas": "pandas", "matplotlib": "matplotlib"}
 
 
+def _data_dir():
+    return os.environ.get("CLAUDE_PLUGIN_DATA") or "/tmp/interactive-repl-data"
+
+
 def _py_site_dir():
-    base = os.environ.get("CLAUDE_PLUGIN_DATA") or "/tmp/interactive-repl-data"
-    d = os.path.join(base, "py-site")
+    d = os.path.join(_data_dir(), "py-site")
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -193,6 +196,12 @@ def main():
     namespace = {"__name__": "__main__", "__builtins__": __builtins__}
     import json as _j, math, os as _os, re, sys as _sys
     namespace.update({"json": _j, "math": math, "os": _os, "re": re, "sys": _sys})
+    # A pre-populated py-site (scripts/setup.sh installs all runtime deps in
+    # one shot) must be on sys.path from the start — otherwise the lazy-install
+    # hook would re-fetch packages that are already there.
+    _site = os.path.join(_data_dir(), "py-site")
+    if os.path.isdir(_site) and os.listdir(_site):
+        sys.path.insert(0, _site)
     # Install the lazy-import hook BEFORE pre-importing numpy/pandas, so a missing
     # dep is fetched into py-site on first use (the server starts with only mcp+pydantic).
     builtins.__import__ = _make_import_wrapper(builtins.__import__)

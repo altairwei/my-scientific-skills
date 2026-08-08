@@ -210,3 +210,19 @@ def test_worker_tcp_mode_ready_and_roundtrip(monkeypatch, tmp_path):
         conn.close()
         proc.terminate()
         srv.close()
+
+
+def test_worker_uses_preinstalled_py_site(monkeypatch, tmp_path):
+    """A py-site pre-populated by scripts/setup.sh is on sys.path from the
+    start — imports work without the lazy-install hook re-fetching."""
+    site = tmp_path / "py-site"
+    site.mkdir()
+    (site / "preinstalled_marker.py").write_text("VALUE = 'preinstalled'\n")
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    p = _spawn()
+    try:
+        r = _call(p, "import preinstalled_marker; print(preinstalled_marker.VALUE)")
+        assert r["error"] is None
+        assert "preinstalled" in r["stdout"]
+    finally:
+        p.stdin.close(); p.terminate()
