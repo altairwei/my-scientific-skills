@@ -38,6 +38,16 @@ defined).
   no further `pip install` is needed.
 - R / `jsonlite` missing → see `r-setup.md`.
 
+## MCP tools missing from the agent's toolset
+
+If `run_code` / `list_variables` / `worker_mode` etc. never appear as available
+tools, the `data-science` plugin's MCP servers are not loaded. Enable them:
+`/plugin install data-science@my-scientific-skills`, then `/reload-plugins`
+(restart Claude Code if the tools still don't appear — MCP servers start once
+per Claude Code process). The servers launch via `uv`; if you see "MCP server
+failed to start", install `uv` first (above) and restart. `r-repl` additionally
+needs R installed (`r-setup.md`).
+
 ## First `import pandas` / `matplotlib` is slow (one-time, then cached)
 
 The `python-repl` server starts with only `mcp`+`pydantic` installed (so MCP startup

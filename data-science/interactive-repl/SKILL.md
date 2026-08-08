@@ -20,6 +20,26 @@ wastes time and breaks the iterate-fast loop. This skill gives you a persistent
 R/Python REPL via two MCP servers (`python-repl`, `r-repl`) so state survives across
 calls.
 
+## Before promising a REPL — is it actually up?
+
+The REPL lives in MCP servers; you only have the tools (`run_code`, `run_chunk`,
+`list_variables`, `worker_mode`, …) if the plugin that ships them is installed
+**and** Claude Code loaded them. Check before you claim a REPL exists:
+
+- **No `run_code` in your toolset?** The servers are not enabled. Say so plainly
+  and walk the user through setup instead of pretending:
+  1. `/plugin install data-science@my-scientific-skills` — then
+     `/reload-plugins`; restart Claude Code if the tools still don't appear.
+  2. `uv` must be on PATH (one-line install — `references/troubleshooting.md`).
+  3. `r-repl` additionally needs R installed (`references/r-setup.md`).
+- **Tools present?** Probe once before promising stateful iteration:
+  `session_info` on a throwaway session name (or `worker_mode` with no args)
+  returns cleanly if the server is live. If it errors "MCP server failed to
+  start", point at the uv/R prerequisites above.
+
+When the user says "set up this skill", that means running the check above and
+reporting what each server needs — not just "the skill is loaded".
+
 ## The iterate rule
 
 Once a session is started for a task, keep running code **in it**. Don't re-run a
