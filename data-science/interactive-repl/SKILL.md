@@ -102,6 +102,7 @@ languages side by side; just use distinct prefixes.
 - `inspect_variable(session, name, path?)` — drill into a DataFrame's columns / a list's elements.
 - `inject(session, path)` — exec a `kernel.py`/`kernel.R` sidecar into the namespace. Call once when another skill ships a sidecar.
 - `restart(session)` — wipe + respawn the worker. **Rarely** — only after a crash or to deliberately reset (loses DB connections + loaded data).
+- `close(session)` — kill the session's worker and release it (scancels the slurm allocation). Sessions are **not** auto-closed — call `close` when the task is done; the next `run_code` on the same name starts a fresh worker.
 - `session_info(session)` — running state, pid, plot dir, and (slurm mode) compute-node job id / node / transport.
 - `worker_mode(mode?, slurm_flags?, transport?)` — probe or switch how workers launch: `local` (default) vs `slurm` (srun on a compute node). Call it with no args to detect the environment; switch for HPC work. See `references/slurm-hpc.md`.
 
@@ -126,13 +127,19 @@ distribution stats numerically.
 ## Multi-session discipline
 
 One driver per session — don't interleave writes to the same named session from parallel
-turns. Use distinct names for parallel tasks (`r:lmp`, `py:splitqc`, …).
+turns. Use distinct names for parallel tasks (`r:lmp`, `py:splitqc`, …). Close a session
+once its task is done — abandoned workers (and slurm allocations) stay alive until closed.
 
-## When to restart (rarely)
+## When to restart — and when to close
 
 After a crash (`run_code` returns "worker died") → `restart(session)`, or to deliberately
 reset. **Do not restart between chunks "to be safe"** — restart-cycles lose DB
 connections and loaded data.
+
+When the task is over (or you're moving to another project) → `close(session)`: kills
+the worker and releases it — frees the process and, in slurm mode, the allocation.
+Sessions are never auto-closed; a worker lives until closed or the server exits. The
+next `run_code` on a closed name starts a fresh worker with an empty namespace.
 
 ## HPC / Slurm — compute nodes
 

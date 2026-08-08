@@ -1,7 +1,7 @@
 # Tools — interactive-repl
 
-The `repl` server exposes eight tools (`run_code`, `run_chunk`, `list_variables`,
-`inspect_variable`, `inject`, `restart`, `session_info`, `worker_mode`) under the
+The `repl` server exposes nine tools (`run_code`, `run_chunk`, `list_variables`,
+`inspect_variable`, `inject`, `restart`, `close`, `session_info`, `worker_mode`) under the
 `mcp__<plugin>_repl__<tool>` namespace. Every tool takes a `session` name first —
 the language comes from the name's prefix (`r:` / `py:`), and sessions are
 auto-created on first `run_code`. Prefixed sessions are independent: `r:lmp` and
@@ -61,6 +61,19 @@ once per sidecar per session, before using its helpers. See `sidecar-authoring.m
 
 Kill + respawn the named worker — wipes the namespace. Use after a `worker died`
 error or to deliberately reset. **Loses DB connections and loaded data** — use sparingly.
+
+## close(session) → Ack
+
+```jsonc
+{ "ok": true, "message": "closed session 'r:lmp'" }
+```
+
+Kill the named session's worker and release it — closes the transport, terminates the
+process, and (slurm mode) scancels the allocation. Unlike `restart`, the worker is NOT
+respawned; the next `run_code` on this name starts a fresh, empty session. Never creates
+a session: closing a name that isn't running is a no-op success
+(`{ "ok": true, "message": "no running session 'r:ghost'" }`). Sessions are not
+auto-closed — call `close` when the task is done.
 
 ## session_info(session) → SessionInfo
 
