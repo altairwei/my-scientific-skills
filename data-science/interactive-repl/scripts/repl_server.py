@@ -181,12 +181,17 @@ _LANGUAGES = {
         "cmd": lambda: [sys.executable, str(WORKER)],
         "tcp": False,                  # stdio JSON lines
         "list_vars": _LIST_VARS_PY,
+        "inspect": lambda name, path: f"print(repr({name}{''.join(f'[{p!r}]' for p in path)}))",
         "sidecar": "kernel.py",
     },
     "r": {
         "cmd": _r_worker_cmd,
         "tcp": True,                   # R base socketConnection is TCP-only
         "list_vars": _LIST_VARS_R,
+        "inspect": lambda name, path: (
+            f"print(str({name}{''.join(f'[[{p!r}]]' for p in path)})); "
+            f"print(utils::head({name}{''.join(f'[[{p!r}]]' for p in path)}, 10))"
+        ),
         "sidecar": "kernel.R",
     },
 }
@@ -241,14 +246,18 @@ def _start(lang: str, bare: str) -> _Session:
         env = {**os.environ, "REPL_PORT": str(port)}
         proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE, text=True)
-        conn, _ = srv.accept()
-        srv.close()  # accepted conn is independent of the listener
-        buf = b""
-        while not buf.endswith(b"\n"):
-            buf += conn.recv(65536)
-        ready = json.loads(buf.decode())
-        if not ready.get("ready"):
-            raise RuntimeError(f"R worker failed to start: {ready!r} {proc.stderr.read()!r}")
+        try:
+            conn, _ = srv.accept()
+            srv.close()  # accepted conn is independent of the listener
+            buf = b""
+            while not buf.endswith(b"\n"):
+                buf += conn.recv(65536)
+            ready = json.loads(buf.decode())
+            if not ready.get("ready"):
+                raise RuntimeError(f"R worker failed to start: {ready!r} {proc.stderr.read()!r}")
+        except Exception:
+            proc.terminate()
+            raise
         s = _Session(proc, conn)
     else:
         p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -352,12 +361,15 @@ def run_chunk(session: str, file: str, selector: str) -> RunChunkResult:
     # (pd.read_csv("data.csv"), open("helper.py") — relative to the notebook, not the
     # server's launch dir).
     nb_dir = str(Path(file).resolve().parent)
-    if lang == "python":  # chunk parser vocabulary, see normalization above
+    if lang == "python":
         r = _call_worker(session, f"import os; os.chdir({nb_dir!r})")
-    else:
+    elif lang == "r":
         r = _call_worker(session, f"setwd({nb_dir!r})")
+    else:
+        return RunChunkResult(stdout="", stderr="", error=f"no cwd handling for language {lang!r}")
     if r.get("error"):
-        return RunChunkResult(stdout="", stderr="", error=f"os.chdir({nb_dir}) failed: {r['error']}")
+        cwd_call = "os.chdir" if lang == "python" else "setwd"
+        return RunChunkResult(stdout="", stderr="", error=f"{cwd_call}({nb_dir}) failed: {r['error']}")
 
     ran: list[ChunkRan] = []
     skipped: list[ChunkSkipped] = []
@@ -493,12 +505,14 @@ def list_variables(session: str) -> VarList:
 
 @mcp.tool()
 def inspect_variable(session: str, name: str, path: list = None) -> InspectResult:
-    """Inspect a variable's repr, optionally drilling by path (e.g. ['df','col'])."""
-    expr = name
-    if path:
-        for p in path:
-            expr += f"[{p!r}]"
-    r = _call_worker(session, f"print(repr({expr}))")
+    """Inspect a variable — repr for Python sessions, str + head for R — optionally
+    drilling by path (e.g. ['df','col'])."""
+    parsed = _parse_session(session)
+    if parsed is None:
+        return InspectResult(name=name, repr="", error=_AMBIG)
+    lang, bare = parsed
+    code = _LANGUAGES[lang]["inspect"](name, path or [])
+    r = _call_worker(session, code)
     return InspectResult(name=name, repr=r.get("stdout", ""), error=r.get("error"))
 
 

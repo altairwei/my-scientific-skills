@@ -105,3 +105,53 @@ async def test_r_session_roundtrip(monkeypatch, tmp_path):
         assert "42" in sc["stdout"]
         r = await client.call_tool("run_code", {"session": "r:s1", "code": "x + 1"})
         assert "7" in r.structured_content["stdout"]
+
+
+@pytest.mark.asyncio
+async def test_cross_language_sessions_isolated(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from repl_server import mcp
+    async with Client(mcp) as client:
+        await client.call_tool("run_code", {"session": "py:sess", "code": "x = 10"})
+        await client.call_tool("run_code", {"session": "r:sess", "code": "y <- 20"})
+        r = await client.call_tool("run_code", {"session": "py:sess", "code": "print(x)"})
+        assert "10" in r.structured_content["stdout"]
+        r = await client.call_tool("run_code", {"session": "py:sess", "code": "print('y' in dir())"})
+        assert "False" in r.structured_content["stdout"]
+
+
+@pytest.mark.asyncio
+async def test_run_chunk_r_session_skips_python_chunks(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    nb = tmp_path / "mix.Rmd"
+    nb.write_text("""```{r}
+x <- 1
+```
+```{python}
+print('hi')
+```
+""")
+    from mcp import Client
+    from repl_server import mcp
+    async with Client(mcp) as client:
+        r = await client.call_tool("run_chunk", {"session": "r:mix", "file": str(nb), "selector": "1-"})
+        sc = r.structured_content
+        assert sc["error"] is None, sc["error"]
+        assert len(sc["ran"]) == 1 and sc["ran"][0]["language"] == "r"
+        assert any(s["language"] == "python" and "py:<name>" in s["reason"]
+                   for s in sc["skipped"])
+
+
+@pytest.mark.asyncio
+async def test_r_inspect_variable(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from repl_server import mcp
+    async with Client(mcp) as client:
+        await client.call_tool("run_code", {"session": "r:insp", "code": "df <- data.frame(a=1:3, b=c('x','y','z'))"})
+        r = await client.call_tool("inspect_variable", {"session": "r:insp", "name": "df"})
+        sc = r.structured_content
+        assert sc["error"] is None, sc["error"]
+        assert "data.frame" in sc["repr"]      # str() output
+        assert "a" in sc["repr"]               # head() column names
