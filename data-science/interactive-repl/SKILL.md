@@ -38,18 +38,20 @@ with a checklist of commands for the user to run.
    matplotlib`) into the worker's `py-site` in a single `uv pip install
    --target` — no mid-session lazy-install stalls, and once cached it works
    offline. Report its output; fix anything it flags.
-3. **R for r-repl — find a usable R** (on HPC it is usually NOT on PATH; see
-   `references/r-setup.md` for the full discovery commands): `command -v
-   Rscript`; `conda env list` then test candidates with `conda run -n <env>
-   Rscript --version`; `module avail` for an R module. You need R **and** the
-   `jsonlite` / `knitr` / `ggplot2` packages (check with `Rscript -e
-   'rownames(installed.packages())'`). When you find one, configure the r-repl
-   server with `INTERACTIVE_REPL_R_ENV` (conda env name) or
-   `INTERACTIVE_REPL_R_BIN` (path to R) — persist it yourself (e.g. append the
-   `export` to `~/.bashrc`) and tell the user to restart Claude Code, because
-   the server reads these at launch. If no R exists anywhere, tell the user the
-   one command to create it (`mamba create -n r-repl -c conda-forge r-base
-   r-jsonlite r-knitr r-ggplot2`).
+3. **Environments — run the skill's discovery scanner** `scripts/discover.py`
+   (Positron-style multi-source: PATH, conda envs via `conda env list --json`
+   with `~/.conda/environments.txt` fallback, uv-managed pythons, system dirs
+   like `/opt/R`; it probes every candidate's version + the packages this
+   skill needs, marks broken ones but keeps scanning). Pick the best **READY**
+   candidate:
+   - **r-repl**: configure with `INTERACTIVE_REPL_R_ENV` (conda env name) or
+     `INTERACTIVE_REPL_R_BIN` (path to R) — persist it yourself (append the
+     `export` to `~/.bashrc`) and tell the user to restart Claude Code, since
+     the server reads these at launch. If nothing is READY, use the create
+     command discover.py prints (`mamba create -n r-repl -c conda-forge
+     r-base r-jsonlite r-knitr r-ggplot2`), then re-run discovery.
+   - **python-repl**: any usable python works — missing deps are installed by
+     `scripts/setup.sh` into `py-site` (never a blocker).
 4. **Plugin state** — inspect `~/.claude/plugins/…` on disk: marketplace entry
    present? plugin enabled? If the plugin itself is missing, ask the user to
    run `/plugin install data-science@my-scientific-skills` (slash commands are

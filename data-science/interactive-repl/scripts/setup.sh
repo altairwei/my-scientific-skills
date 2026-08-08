@@ -81,7 +81,7 @@ if command -v Rscript >/dev/null 2>&1; then
     fi
 else
     warn "Rscript not on PATH — r-repl cannot start until R is installed."
-    warn "On HPC: find a conda env with r-base or 'module load R' (see references/r-setup.md)."
+    warn "Run scripts/discover.py to scan conda envs / system dirs for R, or see references/r-setup.md."
 fi
 
 # --- 4/4 summary ---------------------------------------------------------

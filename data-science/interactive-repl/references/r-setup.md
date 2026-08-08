@@ -3,9 +3,13 @@
 ## Finding R on HPC
 
 On HPC login nodes R is usually NOT on PATH — it lives in a conda env or a
-module. The `r-repl` server launches R per session via
-`INTERACTIVE_REPL_R_ENV` (conda env name → `conda run -n <env>`) or
-`INTERACTIVE_REPL_R_BIN` (path to the R binary). Find a usable one:
+module. The fastest route: run the skill's scanner —
+**`scripts/discover.py`** — which scans PATH, conda envs (`conda env list
+--json`, falling back to `~/.conda/environments.txt`), uv-managed pythons and
+system dirs (`/opt/R`, `/usr/lib/R`, …), probes every candidate's version and
+the packages this skill needs, and prints a READY-marked report with the exact
+`INTERACTIVE_REPL_R_ENV` / `INTERACTIVE_REPL_R_BIN` lines to use. Manual
+commands below if you want to look yourself:
 
 ```bash
 command -v Rscript                       # on PATH already?
