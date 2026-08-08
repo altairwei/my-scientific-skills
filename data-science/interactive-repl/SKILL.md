@@ -24,21 +24,35 @@ calls.
 
 The REPL lives in MCP servers; you only have the tools (`run_code`, `run_chunk`,
 `list_variables`, `worker_mode`, …) if the plugin that ships them is installed
-**and** Claude Code loaded them. Check before you claim a REPL exists:
+**and** Claude Code loaded them. When the user asks to "set up this skill" or the
+REPL tools are missing, **drive the setup yourself — diagnose and fix what you
+can; hand the user only the steps that genuinely require them**. Do not reply
+with a checklist of commands for the user to run.
 
-- **No `run_code` in your toolset?** The servers are not enabled. Say so plainly
-  and walk the user through setup instead of pretending:
-  1. `/plugin install data-science@my-scientific-skills` — then
-     `/reload-plugins`; restart Claude Code if the tools still don't appear.
-  2. `uv` must be on PATH (one-line install — `references/troubleshooting.md`).
-  3. `r-repl` additionally needs R installed (`references/r-setup.md`).
-- **Tools present?** Probe once before promising stateful iteration:
-  `session_info` on a throwaway session name (or `worker_mode` with no args)
-  returns cleanly if the server is live. If it errors "MCP server failed to
-  start", point at the uv/R prerequisites above.
+Diagnose in this order:
 
-When the user says "set up this skill", that means running the check above and
-reporting what each server needs — not just "the skill is loaded".
+1. **Your own toolset** — do you see `run_code` / `session_info` / `worker_mode`?
+   Yes → probe once (`session_info` on a throwaway session, or `worker_mode`
+   with no args) and proceed; the REPL is live. No → servers are not loaded.
+2. **Dependencies — check with shell commands yourself** (`which uv`, `which R`):
+   - `uv` missing → **install it yourself**: `curl -LsSf
+     https://astral.sh/uv/install.sh | sh`, then verify `~/.local/bin/uv
+     --version`. Scriptable — do it, don't delegate.
+   - `R` missing (r-repl) → system-level install; tell the user (conda/apt),
+     the skill doesn't install R.
+3. **Plugin state — inspect on disk** (`ls ~/.claude/plugins/…`): is the
+   marketplace entry / plugin enabled? If the plugin itself is missing, that
+   needs the user (slash commands are user-only): ask them to run
+   `/plugin install data-science@my-scientific-skills` (add the marketplace
+   first if needed) — one command, nothing else.
+4. **Servers never load mid-session** — MCP servers start once per Claude Code
+   process. If the plugin is installed and deps are present, the remaining
+   user-only step is `/reload-plugins` or a restart. Say exactly that one step,
+   and after the user does it, re-verify with `session_info` before claiming the
+   REPL is usable.
+
+When the user says "set up this skill", the outcome is a working probe — or a
+precise one-step ask with everything else already done.
 
 ## The iterate rule
 

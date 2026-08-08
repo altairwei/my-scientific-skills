@@ -41,12 +41,19 @@ defined).
 ## MCP tools missing from the agent's toolset
 
 If `run_code` / `list_variables` / `worker_mode` etc. never appear as available
-tools, the `data-science` plugin's MCP servers are not loaded. Enable them:
-`/plugin install data-science@my-scientific-skills`, then `/reload-plugins`
-(restart Claude Code if the tools still don't appear — MCP servers start once
-per Claude Code process). The servers launch via `uv`; if you see "MCP server
-failed to start", install `uv` first (above) and restart. `r-repl` additionally
-needs R installed (`r-setup.md`).
+tools, the `data-science` plugin's MCP servers are not loaded. The agent should
+diagnose and fix everything scriptable itself, in order:
+
+1. `which uv` / `which R` — missing `uv` is fixable by the agent:
+   `curl -LsSf https://astral.sh/uv/install.sh | sh`. Missing R is
+   system-level; tell the user (`r-setup.md`).
+2. Inspect plugin state on disk (`~/.claude/plugins/…`) — marketplace entry
+   present? plugin enabled?
+3. Only the truly user-only steps get handed over — one command at a time:
+   `/plugin install data-science@my-scientific-skills` (if the plugin is
+   missing), then `/reload-plugins` or a restart (MCP servers start once per
+   Claude Code process — a reload in-session may not be enough). After the
+   user acts, re-verify with `session_info`.
 
 ## First `import pandas` / `matplotlib` is slow (one-time, then cached)
 
