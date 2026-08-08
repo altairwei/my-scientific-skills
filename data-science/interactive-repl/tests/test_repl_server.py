@@ -7,17 +7,19 @@ def test_import_smoke():
 
 
 def test_parse_session_known_prefixes():
-    from repl_server import _parse_session
-    assert _parse_session("r:lmp") is None                    # 'r' not registered until Task 3
-    assert _parse_session("py:lmp") == ("py", "lmp")
-    assert _parse_session("py:abc:def") == ("py", "abc:def")  # bare may contain ':'
-    assert _parse_session("r:") is None                       # empty bare name
-    assert _parse_session("lmp") is None                      # no prefix
-    assert _parse_session(":lmp") is None                     # empty prefix
-    assert _parse_session("x:lmp") is None                    # unknown prefix
-    assert _parse_session("python:lmp") is None               # 'python' is not 'py'
-    assert _parse_session("r: ") is None                      # whitespace-only bare name
-    assert _parse_session("py:  lmp ") == ("py", "lmp")       # bare is stripped
+    from repl_server import _parse_session, _LANGUAGES
+    # every registry key is a valid prefix — driven by the registry so the
+    # test stays correct as language entries are added
+    for prefix in sorted(_LANGUAGES):
+        assert _parse_session(f"{prefix}:lmp") == (prefix, "lmp")
+        assert _parse_session(f"{prefix}:abc:def") == (prefix, "abc:def")  # bare may contain ':'
+        assert _parse_session(f"{prefix}:") is None                       # empty bare name
+        assert _parse_session(f"{prefix}:  lmp ") == (prefix, "lmp")      # whitespace trimmed
+    assert _parse_session("lmp") is None          # no prefix
+    assert _parse_session(":lmp") is None         # empty prefix
+    assert _parse_session("x:lmp") is None        # unknown prefix
+    assert _parse_session("python:lmp") is None   # 'python' is not 'py'
+    assert _parse_session("py: ") is None         # whitespace-only bare
 
 
 @pytest.mark.asyncio
