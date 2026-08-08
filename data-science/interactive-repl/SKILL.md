@@ -79,14 +79,12 @@ extraction** — for exploratory SQL+regex text-mining, batch pipelines, or long
 jobs (training, big joins), use one-shot scripts / the `pipeline-maker` skill.
 
 You don't need to call `start` — the first `run_code` auto-creates the named session.
-Pick a session name matching the task (`lmp`, `infection`, …) and keep using it.
+Pick a prefixed session name matching the task (`r:lmp`, `py:infection`, …) and keep using it.
 
 ## Language choice
 
 Match the surrounding project (pandas vs tidyverse — see the `exploratory-data-analysis`
-skill). Route by session-name prefix (`r:` / `py:`) accordingly. Sessions with
-different prefixes are independent even when the bare name matches (`r:lmp` vs
-`py:lmp`).
+skill). Route by session-name prefix (`r:` / `py:`) accordingly.
 
 ## Session naming — the language lives in the name
 
@@ -128,7 +126,7 @@ distribution stats numerically.
 ## Multi-session discipline
 
 One driver per session — don't interleave writes to the same named session from parallel
-turns. Use distinct names for parallel tasks (`lmp`, `splitqc`, …).
+turns. Use distinct names for parallel tasks (`r:lmp`, `py:splitqc`, …).
 
 ## When to restart (rarely)
 

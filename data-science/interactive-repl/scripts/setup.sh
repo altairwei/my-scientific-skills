@@ -87,7 +87,7 @@ fi
 # --- 4/4 summary ---------------------------------------------------------
 say "4/4  status"
 echo "  py: ready — deps in $SITE_DIR, uv wheel cache warm"
-echo "  r : $R_STATUS"
+echo "  r: $R_STATUS"
 echo ""
 echo "Next (only if the MCP tools are missing from the agent's toolset):"
 echo "  /plugin install data-science@my-scientific-skills   # if not installed"
