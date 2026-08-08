@@ -268,26 +268,26 @@ def print_report(cands):
     if r_ready:
         best = r_ready[0]
         if best.kind == "conda":
-            print(f"  r-repl: export INTERACTIVE_REPL_R_ENV={best.env_name}   "
+            print(f"  r: export INTERACTIVE_REPL_R_ENV={best.env_name}   "
                   f"(best candidate: {best.display_name()})")
         else:
-            print(f"  r-repl: export INTERACTIVE_REPL_R_BIN={best.path}   "
+            print(f"  r: export INTERACTIVE_REPL_R_BIN={best.path}   "
                   f"(best candidate: {best.display_name()})")
     else:
         creator = "mamba" if shutil.which("mamba") else ("conda" if shutil.which("conda") else "")
         if creator:
-            print(f"  r-repl: no usable R — create one: {creator} create -n r-repl "
+            print(f"  r: no usable R — create one: {creator} create -n r-env "
                   f"-c conda-forge r-base r-jsonlite r-knitr r-ggplot2")
         else:
-            print("  r-repl: no usable R and no conda/mamba — install R (see references/r-setup.md)")
+            print("  r: no usable R and no conda/mamba — install R (see references/r-setup.md)")
     py_ready = [c for c in cands if c.language == "python" and c.usable]
     if not py_ready:
-        print("  python-repl: no python found — run scripts/setup.sh (installs uv + deps)")
+        print("  py: no python found — run scripts/setup.sh (installs uv + deps)")
     else:
         best = py_ready[0]
         missing = [p for p, ok in best.packages.items() if not ok]
         if missing:
-            print(f"  python-repl: best candidate {best.display_name()} lacks "
+            print(f"  py: best candidate {best.display_name()} lacks "
                   f"{', '.join(missing)} — run scripts/setup.sh to install them into py-site")
 
 

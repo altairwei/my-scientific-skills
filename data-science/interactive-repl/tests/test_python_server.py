@@ -114,7 +114,7 @@ async def test_run_chunk_wrong_language_skipped(monkeypatch, tmp_path):
     from repl_server import mcp
     qmd = pathlib.Path(__file__).resolve().parent / "fixtures" / "notebook.qmd"
     async with Client(mcp) as client:
-        # selector "1-4" on python-repl: only chunk 2 (py-chunk) is python; 1,3,4 are r
+        # selector "1-4" on a py: session: only chunk 2 (py-chunk) is python; 1,3,4 are r
         r = await client.call_tool("run_chunk", {"session": "py:rc3", "file": str(qmd), "selector": "1-4"})
         sc = r.structured_content
         assert sc["error"] is None

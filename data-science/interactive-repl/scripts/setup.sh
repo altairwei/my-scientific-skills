@@ -2,7 +2,7 @@
 # data-science/interactive-repl/scripts/setup.sh
 # One-shot dependency installer for the interactive-repl skill.
 #
-# Installs everything the two MCP servers + workers need so sessions start
+# Installs everything the MCP server + workers need so sessions start
 # without mid-session downloads (bad networks: run once when the network is
 # good, everything after works from uv's wheel cache). Idempotent — safe to
 # re-run anytime; run it as the first step of any setup/troubleshooting.
@@ -45,10 +45,10 @@ else
 fi
 
 # --- 2/4 python runtime deps --------------------------------------------
-# One uv pip install --target covers everything the servers (mcp, pydantic)
+# One uv pip install --target covers everything the server (mcp, pydantic)
 # and the worker (numpy, pandas, matplotlib) need — no per-package lazy
-# installs at session time. Wheels land in ~/.cache/uv, so the servers' uv
-# run ephemeral envs build offline afterwards.
+# installs at session time. Wheels land in ~/.cache/uv, so the server's uv
+# run ephemeral env builds offline afterwards.
 say "2/4  python runtime deps -> $SITE_DIR"
 mkdir -p "$SITE_DIR"
 if ! uv pip install --target "$SITE_DIR" "${PY_DEPS[@]}"; then
@@ -80,14 +80,14 @@ if command -v Rscript >/dev/null 2>&1; then
         R_STATUS="ready"
     fi
 else
-    warn "Rscript not on PATH — r-repl cannot start until R is installed."
+    warn "Rscript not on PATH — R sessions cannot start until R is installed."
     warn "Run scripts/discover.py to scan conda envs / system dirs for R, or see references/r-setup.md."
 fi
 
 # --- 4/4 summary ---------------------------------------------------------
 say "4/4  status"
-echo "  python-repl : ready — deps in $SITE_DIR, uv wheel cache warm"
-echo "  r-repl      : $R_STATUS"
+echo "  py: ready — deps in $SITE_DIR, uv wheel cache warm"
+echo "  r : $R_STATUS"
 echo ""
 echo "Next (only if the MCP tools are missing from the agent's toolset):"
 echo "  /plugin install data-science@my-scientific-skills   # if not installed"

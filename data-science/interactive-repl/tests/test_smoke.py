@@ -11,7 +11,7 @@ SERVER = HERE.parent / "scripts" / "repl_server.py"
 
 
 @pytest.mark.asyncio
-async def test_python_repl_stdio_roundtrip(monkeypatch, tmp_path):
+async def test_py_stdio_roundtrip(monkeypatch, tmp_path):
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
     params = StdioServerParameters(command=sys.executable, args=[str(SERVER)])
     async with stdio_client(params) as (read, write):
@@ -25,7 +25,7 @@ async def test_python_repl_stdio_roundtrip(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_r_repl_stdio_roundtrip(monkeypatch, tmp_path):
+async def test_r_stdio_roundtrip(monkeypatch, tmp_path):
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
     params = StdioServerParameters(command=sys.executable, args=[str(SERVER)])
     async with stdio_client(params) as (read, write):

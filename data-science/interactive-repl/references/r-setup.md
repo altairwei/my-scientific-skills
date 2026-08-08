@@ -38,8 +38,8 @@ If no env has R, create one (conda-forge has all three packages, no
 compilation):
 
 ```bash
-mamba create -n r-repl -c conda-forge r-base r-jsonlite r-knitr r-ggplot2
-export INTERACTIVE_REPL_R_ENV=r-repl
+mamba create -n r-env -c conda-forge r-base r-jsonlite r-knitr r-ggplot2
+export INTERACTIVE_REPL_R_ENV=r-env
 ```
 
 The one-shot installer `scripts/setup.sh` checks the R on PATH (and with `--r`
@@ -48,7 +48,7 @@ right env via the env vars above.
 
 ## R + packages
 
-The `r-repl` server spawns `R --no-save --no-restore` running `scripts/repl.R`. It
+An `r:` session spawns `R --no-save --no-restore` running `scripts/repl.R`. It
 requires:
 
 - **R** on PATH (or set `INTERACTIVE_REPL_R_BIN` to the R binary path).

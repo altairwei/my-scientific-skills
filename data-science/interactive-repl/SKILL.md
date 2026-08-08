@@ -17,8 +17,8 @@ license: MIT
 A data scientist keeps one live session open per task — load data once, inspect,
 fix assumptions, re-plot. Re-running a script from scratch each time you want to peek
 wastes time and breaks the iterate-fast loop. This skill gives you a persistent
-R/Python REPL via two MCP servers (`python-repl`, `r-repl`) so state survives across
-calls.
+R/Python REPL via one MCP server (`repl`); the language is bound per session by
+name — `r:<task>` for R, `py:<task>` for Python — so state survives across calls.
 
 ## Setup — check, then fix (drive it yourself)
 
@@ -44,13 +44,13 @@ with a checklist of commands for the user to run.
    like `/opt/R`; it probes every candidate's version + the packages this
    skill needs, marks broken ones but keeps scanning). Pick the best **READY**
    candidate:
-   - **r-repl**: configure with `INTERACTIVE_REPL_R_ENV` (conda env name) or
+   - **R**: configure with `INTERACTIVE_REPL_R_ENV` (conda env name) or
      `INTERACTIVE_REPL_R_BIN` (path to R) — persist it yourself (append the
      `export` to `~/.bashrc`) and tell the user to restart Claude Code, since
      the server reads these at launch. If nothing is READY, use the create
-     command discover.py prints (`mamba create -n r-repl -c conda-forge
+     command discover.py prints (`mamba create -n r-env -c conda-forge
      r-base r-jsonlite r-knitr r-ggplot2`), then re-run discovery.
-   - **python-repl**: any usable python works — missing deps are installed by
+   - **Python**: any usable python works — missing deps are installed by
      `scripts/setup.sh` into `py-site` (never a blocker).
 4. **Plugin state** — inspect `~/.claude/plugins/…` on disk: marketplace entry
    present? plugin enabled? If the plugin itself is missing, ask the user to
@@ -59,10 +59,11 @@ with a checklist of commands for the user to run.
 5. **Loaded servers never appear mid-session** — MCP servers start once per
    Claude Code process. If deps and plugin are fine, the remaining user-only
    step is `/reload-plugins` or a restart. After the user acts, re-verify with
-   `session_info` on both servers before claiming the REPL is usable.
+   `session_info` on a `py:smoke` and an `r:smoke` session before claiming the
+   REPL is usable.
 
-When the user says "set up this skill", the outcome is a working probe on both
-servers — or a precise one-step ask with everything else already done.
+When the user says "set up this skill", the outcome is a working probe on the
+merged server — or a precise one-step ask with everything else already done.
 
 ## The iterate rule
 
@@ -83,10 +84,19 @@ Pick a session name matching the task (`lmp`, `infection`, …) and keep using i
 ## Language choice
 
 Match the surrounding project (pandas vs tidyverse — see the `exploratory-data-analysis`
-skill). Route to `python-repl` or `r-repl` accordingly. Session names are scoped per
-server: a `lmp` session on `python-repl` and on `r-repl` are independent.
+skill). Route by session-name prefix (`r:` / `py:`) accordingly. Sessions with
+different prefixes are independent even when the bare name matches (`r:lmp` vs
+`py:lmp`).
 
-## The tools (per server)
+## Session naming — the language lives in the name
+
+Every session name carries its language as a prefix: `r:<task>` spawns an R
+worker, `py:<task>` a Python worker (auto-created on the first `run_code`).
+Unprefixed names are rejected with "ambiguous session name — use 'r:<name>' or
+'py:<name>'". `r:lmp` and `py:lmp` are independent workers — you can run both
+languages side by side; just use distinct prefixes.
+
+## The tools (one server, both languages)
 
 - `run_code(session, code)` — run code; returns `{stdout, stderr, error, plots:[path], truncated, degraded}`. State persists.
 - `run_chunk(session, file, selector)` — run one chunk (or a range) from a `.Rmd`/`.qmd`/`.ipynb` notebook in the session. `selector` = label / index / `N-M` / `N-` / `^label` (run 1..label) / `label^` (run label..end). Routes by language; skips `eval=FALSE`. See `references/notebook-iteration.md`.
@@ -146,9 +156,10 @@ namespace). Requires shared storage for plots (`CLAUDE_PLUGIN_DATA`) — see
 
 For notebook workflows, don't hand-extract chunks — use the chunk tools. List chunks with
 `notebook_chunks.py FILE` (no session), then `run_chunk(session, FILE, selector)` to run one
-or a range in dependency order. Routes each chunk to the matching server by language (R →
-`r-repl`, Python → `python-repl`); `eval=FALSE` chunks are skipped. Read-only on the file —
-outputs to disk + `Read`. See `references/notebook-iteration.md` for the full workflow.
+or a range in dependency order. Routes each chunk by the session's language (an `r:` session
+runs R chunks, a `py:` session Python chunks); `eval=FALSE` chunks are skipped. Read-only on
+the file — outputs to disk + `Read`. See `references/notebook-iteration.md` for the full
+workflow.
 
 ## Survives compaction
 

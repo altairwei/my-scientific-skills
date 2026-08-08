@@ -18,22 +18,24 @@ uv run scripts/notebook_chunks.py analysis.qmd --chunk extract   # one chunk's c
 
 ## Run chunks (one call)
 
-`run_chunk(session, file, selector)` on the matching server parses, resolves, and runs each
+`run_chunk(session, file, selector)` on the server parses, resolves, and runs each
 chunk in notebook order. `selector` = label (`extract`), index (`3`), range (`3-7`), open
 range (`3-` = to end), run-above (`^extract` = chunks 1..extract — "Run All Above"), or
 run-from (`extract^` = chunks extract..end). Returns `{stdout, stderr, error, plots, ran,
 skipped, failed_chunk}`.
 
 - `ran` — chunks that executed (index/label/language).
-- `skipped` — chunks not run, with a reason: `eval=FALSE` or `language=<lang>, use <other>-repl`.
+- `skipped` — chunks not run, with a reason: `eval=FALSE` or `language=<lang>, use <lang>:<name>`
+  (a routing hint — the chunk belongs to a session of the other language).
 - `failed_chunk` — the chunk that errored, if `error` is set. Later chunks are not run.
 
 ## Cross-language routing
 
-A `.qmd` or `.ipynb` can mix R and Python chunks. `run_chunk` on **r-repl** runs only
-`language == "r"` chunks; on **python-repl** only `language == "python"`. The rest appear
-in `skipped` with a routing hint. For a mixed notebook, call `run_chunk` on each server:
-R chunks on `r-repl`, Python chunks on `python-repl`.
+A `.qmd` or `.ipynb` can mix R and Python chunks. The session's language (its `r:` /
+`py:` prefix) decides which chunks run: an `r:` session runs only `language == "r"`
+chunks, a `py:` session only `language == "python"`. The rest appear in `skipped` with a
+routing hint. For a mixed notebook, use two sessions: R chunks in `r:mix`, Python chunks
+in `py:mix`.
 
 ## Paths: absolute `file`, chunk-relative everything else
 
@@ -69,9 +71,10 @@ to disk. `run_chunk` and the CLI never write to the notebook.
 
 ## Limitation + escape hatch
 
-The `.Rmd`/`.qmd` parser is a pure-Python fence parser (no R dependency) so both servers
+The `.Rmd`/`.qmd` parser is a pure-Python fence parser (no R dependency) so the server
 and the CLI parse all three formats. It is best-effort: a literal triple-backtick *inside*
-a chunk body (rare) can confuse it. For 100% knitr fidelity, tangle the file on `r-repl`:
+a chunk body (rare) can confuse it. For 100% knitr fidelity, tangle the file in an `r:`
+session:
 
 ```r
 knitr::purl("analysis.qmd", output = "/tmp/analysis.R", documentation = 1)

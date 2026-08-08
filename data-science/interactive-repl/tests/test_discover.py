@@ -54,17 +54,17 @@ def test_conda_envs_txt_fallback(monkeypatch, tmp_path):
     home = tmp_path / "home"
     (home / ".conda").mkdir(parents=True)
     (home / ".conda" / "environments.txt").write_text(
-        "/opt/conda\n/home/u/envs/r-repl\n")
+        "/opt/conda\n/home/u/envs/r-env\n")
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("PATH", str(tmp_path))  # no conda on PATH
-    assert discover._conda_env_prefixes() == ["/opt/conda", "/home/u/envs/r-repl"]
+    assert discover._conda_env_prefixes() == ["/opt/conda", "/home/u/envs/r-env"]
 
 
 def test_conda_env_names_marks_base(monkeypatch, tmp_path):
     monkeypatch.setenv("CONDA_PREFIX", "/opt/conda")
-    names = discover._conda_env_names(["/opt/conda", "/home/u/envs/r-repl"])
+    names = discover._conda_env_names(["/opt/conda", "/home/u/envs/r-env"])
     assert names["/opt/conda"] == "base"
-    assert names["/home/u/envs/r-repl"] == "r-repl"
+    assert names["/home/u/envs/r-env"] == "r-env"
 
 
 def test_system_r_bins_finds_opt_R_layout(monkeypatch, tmp_path):

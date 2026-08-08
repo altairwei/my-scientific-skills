@@ -1,4 +1,4 @@
-# Base interactive-repl R sidecar — auto-sourced into every r-repl session.
+# Base interactive-repl R sidecar — auto-sourced into every R (`r:`) session.
 # Definition-only, lazy deps — reference example for sidecar authoring.
 
 who <- function() {

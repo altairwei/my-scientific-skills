@@ -21,7 +21,7 @@ Skills for data analysis, statistics, and visualization.
 | Skill | Description |
 |-------|-------------|
 | [exploratory-data-analysis](data-science/exploratory-data-analysis/) | Guides Claude through a structured exploratory data analysis of a tabular dataset |
-| [interactive-repl](data-science/interactive-repl/) | Persistent R/Python REPL via two MCP servers (python-repl, r-repl) — iterate in-session instead of re-running scripts; auto plot capture, variable inspection, sidecar injection; HPC/Slurm compute-node sessions |
+| [interactive-repl](data-science/interactive-repl/) | Persistent R/Python REPL via one MCP server (`repl`) with per-session language prefixes (`r:` / `py:`) — iterate in-session instead of re-running scripts; auto plot capture, variable inspection, sidecar injection; HPC/Slurm compute-node sessions |
 
 ### scientific-writing
 
@@ -41,9 +41,9 @@ Skills for scientific writing, literature work, and publishing workflows.
 
 Each category directory is a plugin; install only the categories you need.
 
-> **`data-science` plugin prerequisite — `uv`:** the `interactive-repl` skill bundles two
-> MCP servers (`python-repl`, `r-repl`) that launch via [`uv`](https://docs.astral.sh/uv/).
-> `uv run` reads each server's inline `# /// script` metadata and installs the Python deps
+> **`data-science` plugin prerequisite — `uv`:** the `interactive-repl` skill bundles one
+> MCP server (`repl`) that launches via [`uv`](https://docs.astral.sh/uv/).
+> `uv run` reads the server's inline `# /// script` metadata and installs the Python deps
 > (`mcp`, `pydantic`, …) into an ephemeral env, so **once `uv` exists, no `pip install` is
 > needed**. If `uv` isn't installed, add it first:
 >
@@ -51,8 +51,8 @@ Each category directory is a plugin; install only the categories you need.
 > curl -LsSf https://astral.sh/uv/install.sh | sh
 > ```
 >
-> Then restart Claude Code so the MCP servers pick up `uv` on `PATH`. (The `r-repl` server
-> also needs R installed — see `data-science/interactive-repl/references/r-setup.md`.)
+> Then restart Claude Code so the MCP server picks up `uv` on `PATH`. (R sessions also need
+> R installed — see `data-science/interactive-repl/references/r-setup.md`.)
 
 ### Manual
 

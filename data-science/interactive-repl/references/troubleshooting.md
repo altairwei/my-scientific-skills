@@ -39,8 +39,8 @@ sessions start without any mid-session downloads.
 
 - `uv` not installed — or `MCP server failed to start` / `ModuleNotFoundError: No module
   named 'mcp'` — → install `uv` (one line): `curl -LsSf https://astral.sh/uv/install.sh | sh`,
-  then **restart Claude Code** so the servers pick up `uv` on `PATH`. The `data-science`
-  plugin's MCP servers launch via `uv run`, which reads each server's `# /// script`
+  then **restart Claude Code** so the server picks up `uv` on `PATH`. The `data-science`
+  plugin's MCP server launches via `uv run`, which reads the server's `# /// script`
   metadata and auto-installs `mcp`/`pydantic`/… into an ephemeral env — so once `uv` exists,
   no further `pip install` is needed.
 - R / `jsonlite` missing → see `r-setup.md`.
@@ -48,7 +48,7 @@ sessions start without any mid-session downloads.
 ## MCP tools missing from the agent's toolset
 
 If `run_code` / `list_variables` / `worker_mode` etc. never appear as available
-tools, the `data-science` plugin's MCP servers are not loaded. The agent should
+tools, the `data-science` plugin's MCP server is not loaded. The agent should
 diagnose and fix everything scriptable itself, in order:
 
 1. Run `scripts/setup.sh` — installs `uv` (if missing) and all python runtime
@@ -64,7 +64,7 @@ diagnose and fix everything scriptable itself, in order:
 
 ## First `import pandas` / `matplotlib` is slow (one-time, then cached)
 
-The `python-repl` server starts with only `mcp`+`pydantic` installed (so MCP startup
+The `repl` server starts with only `mcp`+`pydantic` installed (so MCP startup
 stays fast and never times out). The heavy data-science deps (`numpy`, `matplotlib`,
 `pandas`) are fetched **on first import** by the worker into a persistent
 `${CLAUDE_PLUGIN_DATA}/py-site` dir via `uv pip install --target` (reuses `uv`'s wheel

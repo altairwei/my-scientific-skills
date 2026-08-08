@@ -1,9 +1,11 @@
 # Tools — interactive-repl
 
-Both `python-repl` and `r-repl` expose the same six tools. Tool names are scoped per
-language: `mcp__<plugin>_python-repl__<tool>` and `mcp__<plugin>_r-repl__<tool>`. Every
-tool takes a `session` name first — sessions are auto-created on first `run_code` and
-are independent per server (a `lmp` Python session and a `lmp` R session are unrelated).
+The `repl` server exposes eight tools (`run_code`, `run_chunk`, `list_variables`,
+`inspect_variable`, `inject`, `restart`, `session_info`, `worker_mode`) under the
+`mcp__<plugin>_repl__<tool>` namespace. Every tool takes a `session` name first —
+the language comes from the name's prefix (`r:` / `py:`), and sessions are
+auto-created on first `run_code`. Prefixed sessions are independent: `r:lmp` and
+`py:lmp` are unrelated workers.
 
 ## run_code(session, code, timeout=300) → RunResult
 
@@ -63,5 +65,5 @@ error or to deliberately reset. **Loses DB connections and loaded data** — use
 ## session_info(session) → SessionInfo
 
 ```jsonc
-{ "session": "lmp", "running": true, "pid": 12345, "plot_dir": "/.../plots" }
+{ "session": "r:lmp", "running": true, "pid": 12345, "plot_dir": "/.../plots" }
 ```

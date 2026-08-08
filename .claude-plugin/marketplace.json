@@ -30,13 +30,9 @@
         "./data-science/interactive-repl"
       ],
       "mcpServers": {
-        "python-repl": {
+        "repl": {
           "command": "uv",
-          "args": ["run", "${CLAUDE_PLUGIN_ROOT}/data-science/interactive-repl/scripts/python_repl_server.py"]
-        },
-        "r-repl": {
-          "command": "uv",
-          "args": ["run", "${CLAUDE_PLUGIN_ROOT}/data-science/interactive-repl/scripts/r_repl_server.py"]
+          "args": ["run", "${CLAUDE_PLUGIN_ROOT}/data-science/interactive-repl/scripts/repl_server.py"]
         }
       }
     },

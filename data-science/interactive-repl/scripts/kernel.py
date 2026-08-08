@@ -1,4 +1,4 @@
-"""Base interactive-repl sidecar — auto-injected into every python-repl session.
+"""Base interactive-repl sidecar — auto-injected into every Python (`py:`) session.
 
 Definition-only, lazy imports (no side-effect code at load) — also the reference
 example for sidecar authoring (see references/sidecar-authoring.md).

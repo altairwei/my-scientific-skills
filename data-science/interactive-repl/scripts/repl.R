@@ -2,7 +2,7 @@
 # data-science/interactive-repl/scripts/repl.R
 # Persistent R namespace over a JSON-per-line TCP (localhost) protocol.
 #
-# The server (r_repl_server.py) listens on a TCP port; R connects as a client and
+# The server (repl_server.py) listens on a TCP port; R connects as a client and
 # runs an eval loop. (R's base socketConnection is TCP-only — no Unix domain
 # sockets — so we use TCP localhost on an ephemeral port the server passes.)
 #

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # data-science/interactive-repl/scripts/_slurm.py
-# Shared Slurm/HPC launch helpers for the python-repl and r-repl MCP servers.
+# Shared Slurm/HPC launch helpers for the repl MCP server.
 #
 # Slurm mode is active when INTERACTIVE_REPL_SLURM (srun flags string) is set
 # or the worker_mode tool overrode the mode. A worker is launched with
