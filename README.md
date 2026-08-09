@@ -23,6 +23,14 @@ Skills for data analysis, statistics, and visualization.
 | [exploratory-data-analysis](data-science/exploratory-data-analysis/) | Guides Claude through a structured exploratory data analysis of a tabular dataset |
 | [interactive-repl](data-science/interactive-repl/) | Persistent R/Python REPL via one MCP server (`repl`) with per-session language prefixes (`r:` / `py:`) — iterate in-session instead of re-running scripts; auto plot capture, variable inspection, sidecar injection; HPC/Slurm compute-node sessions |
 
+### computing-infrastructure
+
+Skills for compute environment setup and infrastructure workflows.
+
+| Skill | Description |
+|-------|-------------|
+| [compute-env-setup](computing-infrastructure/compute-env-setup/) | Set up and record scientific compute environments — conda/venv, Docker, direct SSH hosts, Slurm/PBS clusters; mirror switching first (chsrc), declarative env spec, three-level validation, private per-host ledger |
+
 ### scientific-writing
 
 Skills for scientific writing, literature work, and publishing workflows.
@@ -37,6 +45,7 @@ Skills for scientific writing, literature work, and publishing workflows.
 /plugin marketplace add <your-github-user>/my-scientific-skills
 /plugin install bioinformatics@my-scientific-skills
 /plugin install data-science@my-scientific-skills
+/plugin install computing-infrastructure@my-scientific-skills
 ```
 
 Each category directory is a plugin; install only the categories you need.

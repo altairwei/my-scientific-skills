@@ -42,6 +42,15 @@
       "source": "./",
       "strict": false,
       "skills": []
+    },
+    {
+      "name": "computing-infrastructure",
+      "description": "Skills for compute environment setup and infrastructure workflows",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./computing-infrastructure/compute-env-setup"
+      ]
     }
   ]
 }
