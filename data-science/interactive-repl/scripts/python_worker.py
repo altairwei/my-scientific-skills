@@ -233,6 +233,26 @@ def main():
     namespace = {"__name__": "__main__", "__builtins__": __builtins__}
     import json as _j, math, os as _os, re, sys as _sys
     namespace.update({"json": _j, "math": math, "os": _os, "re": re, "sys": _sys})
+
+    # Shadow site.Quitter: the real exit()/quit() close sys.stdin before raising
+    # SystemExit, killing the protocol channel. This quitter raises without
+    # touching stdin; the marker subclass gates the hint so a library sys.exit()
+    # is not blamed on REPL muscle memory.
+    class _ReplQuitterExit(SystemExit):
+        pass
+    _ReplQuitterExit.__name__ = "SystemExit"
+    _ReplQuitterExit.__qualname__ = "SystemExit"
+
+    class _ReplQuitter:
+        def __repr__(self):
+            return ("exit()/quit() is disabled here — close the session with "
+                    "the `close(session)` tool.")
+        def __call__(self, code=None):
+            raise _ReplQuitterExit(code)
+
+    _quitter = _ReplQuitter()
+    namespace["exit"] = namespace["quit"] = _quitter
+    builtins.exit = builtins.quit = _quitter
     # A pre-populated py-site (scripts/setup.sh installs all runtime deps in
     # one shot) must be on sys.path from the start — otherwise the lazy-install
     # hook would re-fetch packages that are already there.
@@ -287,12 +307,17 @@ def main():
 
         out_cap, err_cap = _CappedStringIO(), _CappedStringIO()
         error = None
+        interrupted = False
         old_out, old_err = sys.stdout, sys.stderr
         try:
             sys.stdout, sys.stderr = out_cap, err_cap
             _execute_cell(code, cell_tag, namespace)
-        except BaseException:
+        except BaseException as e:
+            interrupted = bool(getattr(e, "_repl_delivered", False))
             error = traceback.format_exc()
+            if isinstance(e, _ReplQuitterExit):
+                error += ("\n(exit()/quit() is disabled here — close the session "
+                          "with the `close(session)` tool.)")
         finally:
             sys.stdout, sys.stderr = old_out, old_err
 
@@ -307,7 +332,8 @@ def main():
             stdout = _common.never_empty(stdout, raw_stderr)
         protocol_out.write(_common.encode_line({
             "id": rid, "stdout": stdout, "stderr": raw_stderr, "error": error,
-            "plots": plots, "truncated": truncated, "degraded": degraded}))
+            "plots": plots, "truncated": truncated, "degraded": degraded,
+            "interrupted": interrupted}))
         protocol_out.flush()
 
 

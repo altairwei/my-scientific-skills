@@ -254,6 +254,32 @@ def test_linecache_bounded():
         p.stdin.close(); p.terminate()
 
 
+# ---- exit()/quit() shadowing -------------------------------------------------
+
+def test_exit_shadowed_with_hint():
+    p = _spawn()
+    try:
+        r = _call(p, "exit()")
+        assert r["error"] is not None and "disabled" in r["error"]
+        assert r["interrupted"] is False
+        r2 = _call(p, "1 + 1")          # worker survives
+        assert r2["error"] is None and "2" in r2["stdout"]
+    finally:
+        p.stdin.close(); p.terminate()
+
+
+def test_sys_exit_not_blamed_on_quitter():
+    p = _spawn()
+    try:
+        r = _call(p, "import sys; sys.exit(3)")
+        assert r["error"] is not None and "SystemExit" in r["error"]
+        assert "disabled" not in r["error"]   # marker gate: not the shadow quitter
+        r2 = _call(p, "1 + 1")
+        assert r2["error"] is None
+    finally:
+        p.stdin.close(); p.terminate()
+
+
 def test_worker_uses_preinstalled_py_site(monkeypatch, tmp_path):
     """A py-site-<ver> pre-populated by scripts/setup.sh is on sys.path from
     the start — imports work without the lazy-install hook re-fetching."""
