@@ -207,10 +207,24 @@ def _make_import_wrapper(_orig_import):
 
 
 def main():
+    # User code must never see the host's API keys (prompt-injection exfil
+    # surface). Pop a static denylist from the WORKER's env only — never the
+    # server's. Vars the worker needs (CLAUDE_PLUGIN_DATA, INTERACTIVE_REPL_*,
+    # PATH, conda env vars, SLURM_*) are not in the list.
+    for _k in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY",
+               "OPENROUTER_API_KEY", "GITHUB_TOKEN", "HF_TOKEN",
+               "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"):
+        os.environ.pop(_k, None)
+
     # Protocol channel: stdio pipes. Real stdin/stdout → devnull so user
-    # subprocesses inheriting them can't corrupt the stream.
+    # subprocesses inheriting them can't corrupt the stream. The protocol fds
+    # are explicitly non-inheritable (PEP 446 makes os.dup non-inheritable by
+    # default; state the intent so a user subprocess can never hold the pipe
+    # write-end open and wedge the server's EOF detection).
     protocol_in = os.fdopen(os.dup(0), "r", encoding="utf-8", errors="replace")
     protocol_out = os.fdopen(os.dup(1), "w", encoding="utf-8", buffering=1)
+    os.set_inheritable(protocol_in.fileno(), False)
+    os.set_inheritable(protocol_out.fileno(), False)
     os.dup2(os.open(os.devnull, os.O_RDONLY), 0)
     os.dup2(os.open(os.devnull, os.O_WRONLY), 1)
 
@@ -269,6 +283,7 @@ def main():
         counter += 1
         cell_tag = f"<repl:{counter}>"
         _lc.cache[cell_tag] = (len(code), None, code.splitlines(True), cell_tag)
+        _lc.cache.pop(f"<repl:{counter - 128}>", None)  # bound the cache
 
         out_cap, err_cap = _CappedStringIO(), _CappedStringIO()
         error = None

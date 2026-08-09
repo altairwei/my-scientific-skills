@@ -217,6 +217,43 @@ def test_runaway_print_capped_in_worker():
         p.stdin.close(); p.terminate()
 
 
+# ---- hygiene: secrets / fd inheritance / linecache ---------------------------
+
+def test_secret_env_stripped_in_worker(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-secret-123")
+    monkeypatch.setenv("GITHUB_TOKEN", "gh-secret")
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", "/tmp/x")  # must NOT be stripped
+    p = _spawn()
+    try:
+        r = _call(p, "import os; print(os.environ.get('ANTHROPIC_API_KEY'), '|', "
+                      "os.environ.get('GITHUB_TOKEN'), '|', os.environ.get('CLAUDE_PLUGIN_DATA'))")
+        assert "None | None | /tmp/x" in r["stdout"]
+    finally:
+        p.stdin.close(); p.terminate()
+
+
+def test_protocol_fds_not_inheritable():
+    # Protocol fds are dup'd 3 and 4 (0/1 → devnull); user subprocesses must
+    # not inherit them (else server EOF detection can hang).
+    p = _spawn()
+    try:
+        r = _call(p, "import os; print([os.get_inheritable(3), os.get_inheritable(4)])")
+        assert "[False, False]" in r["stdout"]
+    finally:
+        p.stdin.close(); p.terminate()
+
+
+def test_linecache_bounded():
+    p = _spawn()
+    try:
+        for i in range(130):
+            _call(p, f"def f{i}(): pass")
+        r = _call(p, "import linecache; print(len(linecache.cache))")
+        assert int(r["stdout"].strip()) < 130  # eviction keeps only the last ~128
+    finally:
+        p.stdin.close(); p.terminate()
+
+
 def test_worker_uses_preinstalled_py_site(monkeypatch, tmp_path):
     """A py-site-<ver> pre-populated by scripts/setup.sh is on sys.path from
     the start — imports work without the lazy-install hook re-fetching."""
