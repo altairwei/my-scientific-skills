@@ -20,7 +20,15 @@
 # Re-run this script if that interpreter ever changes.
 set -euo pipefail
 
-SITE_DIR="${CLAUDE_PLUGIN_DATA:-/tmp/interactive-repl-data}/py-site"
+# py-site wheels are interpreter-version-specific (uv builds them for the
+# interpreter uv run resolves — the same one the workers use by default).
+# The dir is version-keyed (py-site-<major>.<minor>) so a worker launched
+# with a different interpreter (INTERACTIVE_REPL_PY_BIN) never imports stale
+# wrong-ABI wheels from another version's dir.
+PY_VER=$(uv run --no-project python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null \
+        || python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null \
+        || echo "3")
+SITE_DIR="${CLAUDE_PLUGIN_DATA:-/tmp/interactive-repl-data}/py-site-${PY_VER}"
 PY_DEPS=(mcp pydantic numpy pandas matplotlib)
 R_PKGS=(jsonlite knitr ggplot2)
 R_REPO="https://cloud.r-project.org"

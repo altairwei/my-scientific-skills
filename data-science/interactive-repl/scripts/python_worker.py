@@ -116,7 +116,11 @@ def _data_dir():
 
 
 def _py_site_dir():
-    d = os.path.join(_data_dir(), "py-site")
+    # Wheels are interpreter-ABI-specific — key the dir by interpreter version
+    # so a worker launched with a different python (INTERACTIVE_REPL_PY_BIN)
+    # never imports stale wrong-ABI wheels from another version's dir.
+    ver = f"{sys.version_info.major}.{sys.version_info.minor}"
+    d = os.path.join(_data_dir(), f"py-site-{ver}")
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -177,7 +181,7 @@ def main():
     # A pre-populated py-site (scripts/setup.sh installs all runtime deps in
     # one shot) must be on sys.path from the start — otherwise the lazy-install
     # hook would re-fetch packages that are already there.
-    _site = os.path.join(_data_dir(), "py-site")
+    _site = _py_site_dir()
     if os.path.isdir(_site) and os.listdir(_site):
         sys.path.insert(0, _site)
     # Install the lazy-import hook BEFORE pre-importing numpy/pandas, so a missing

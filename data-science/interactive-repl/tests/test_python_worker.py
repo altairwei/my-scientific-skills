@@ -109,10 +109,11 @@ def test_lazy_install_invokes_uv_pip_target(tmp_path, monkeypatch):
     monkeypatch.setattr(python_worker.subprocess, "run", fake_run)
     assert python_worker._lazy_install("pandas") is True
     cmd = captured["cmd"]
+    site_dir = f"py-site-{sys.version_info.major}.{sys.version_info.minor}"
     assert "pip" in cmd and "install" in cmd
     assert "--target" in cmd and "pandas" in cmd
-    assert str(tmp_path / "py-site") in cmd
-    assert str(tmp_path / "py-site") in sys.path   # added so the retry import finds it
+    assert str(tmp_path / site_dir) in cmd
+    assert str(tmp_path / site_dir) in sys.path   # added so the retry import finds it
 
 
 def test_lazy_install_returns_false_on_failure(tmp_path, monkeypatch):
@@ -172,9 +173,9 @@ def test_capture_new_figures_does_not_import_matplotlib(monkeypatch):
 
 
 def test_worker_uses_preinstalled_py_site(monkeypatch, tmp_path):
-    """A py-site pre-populated by scripts/setup.sh is on sys.path from the
-    start — imports work without the lazy-install hook re-fetching."""
-    site = tmp_path / "py-site"
+    """A py-site-<ver> pre-populated by scripts/setup.sh is on sys.path from
+    the start — imports work without the lazy-install hook re-fetching."""
+    site = tmp_path / f"py-site-{sys.version_info.major}.{sys.version_info.minor}"
     site.mkdir()
     (site / "preinstalled_marker.py").write_text("VALUE = 'preinstalled'\n")
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))

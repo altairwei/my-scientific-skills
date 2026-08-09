@@ -1,5 +1,7 @@
 import json
 import pathlib
+import sys
+
 import pytest
 
 
@@ -271,3 +273,19 @@ async def test_close_does_not_affect_other_sessions(monkeypatch, tmp_path):
         r = await client.call_tool("run_code", {"session": "py:cl4", "code": "b"})
         assert r.structured_content["error"] is None
         assert "2" in r.structured_content["stdout"]
+
+
+@pytest.mark.asyncio
+async def test_py_bin_env_selects_interpreter(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    shim = tmp_path / "py-shim"
+    shim.write_text("#!/bin/sh\nexec %s \"$@\"\n" % sys.executable)
+    shim.chmod(0o755)
+    monkeypatch.setenv("INTERACTIVE_REPL_PY_BIN", str(shim))
+    from mcp import Client
+    from repl_server import mcp, _sessions
+    async with Client(mcp) as client:
+        r = await client.call_tool("run_code", {"session": "py:pybin1", "code": "1 + 1"})
+        assert r.structured_content["error"] is None
+        assert "2" in r.structured_content["stdout"]
+    assert _sessions["py:pybin1"].proc.args[0] == str(shim)  # env selected the interpreter

@@ -289,6 +289,9 @@ def print_report(cands):
         if missing:
             print(f"  py: best candidate {best.display_name()} lacks "
                   f"{', '.join(missing)} — run scripts/setup.sh to install them into py-site")
+    print("  Write the chosen env into THIS project's .claude/settings.local.json "
+          "(env section), e.g. {\"env\": {\"INTERACTIVE_REPL_R_ENV\": \"...\"}} — "
+          "ask the user which env to use; never ~/.bashrc.")
 
 
 def main():
