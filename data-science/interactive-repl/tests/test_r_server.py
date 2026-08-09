@@ -190,6 +190,20 @@ async def test_r_run_chunk_run_above(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_r_child_output_tolerated(monkeypatch, tmp_path):
+    """R system() output leaks raw lines onto the protocol stream — the
+    tolerant reader skips non-JSON lines and returns the matching response."""
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from repl_server import mcp
+    async with Client(mcp) as client:
+        r = await client.call_tool("run_code", {"session": "r:noise1", "code": 'system("echo RAW-NOISE"); 1 + 1'})
+        sc = r.structured_content
+        assert sc["error"] is None
+        assert "2" in sc["stdout"]
+
+
+@pytest.mark.asyncio
 async def test_r_run_chunk_run_from(monkeypatch, tmp_path):
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
     from mcp import Client

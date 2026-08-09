@@ -8,7 +8,7 @@
 the session name — 'r:<name>' spawns an R worker (repl.R), 'py:<name>' spawns
 python_worker.py. Language-specific bits live in _LANGUAGES; everything else
 is shared glue (session pool, proxying, capping, slurm)."""
-import json, os, socket, subprocess, sys, uuid
+import json, os, selectors, subprocess, sys, time, uuid
 from pathlib import Path
 from pydantic import BaseModel, Field
 from mcp.server import MCPServer
@@ -26,15 +26,13 @@ mcp = MCPServer("repl")
 
 class _Session:
     """One worker. Local mode: proc pipes carry the protocol. Slurm mode:
-    conn is the accepted TCP socket; job_id/node/transport come from the
-    worker's ready handshake (SLURM_JOB_ID / SLURM_JOB_NODELIST)."""
+    the same pipes are forwarded by the salloc/srun chain; job_id/node come
+    from the worker's ready handshake (SLURM_JOB_ID / SLURM_JOB_NODELIST)."""
 
-    def __init__(self, proc, conn=None, job_id=None, node=None, transport="local"):
+    def __init__(self, proc, job_id=None, node=None):
         self.proc = proc
-        self.conn = conn
         self.job_id = job_id
         self.node = node
-        self.transport = transport
 
 
 _sessions: dict[str, _Session] = {}
@@ -91,7 +89,6 @@ class SessionInfo(BaseModel):
     plot_dir: str = ""
     job_id: str | None = None
     node: str | None = None
-    transport: str = "local"
     error: str | None = None
 
 
@@ -122,15 +119,12 @@ class InspectResult(BaseModel):
 class Probe(BaseModel):
     srun_available: bool = False
     already_in_allocation: bool = False
-    ssh_available: bool = False
 
 
 class WorkerModeInfo(BaseModel):
     mode: str
     source: str
     slurm_flags: str = ""
-    transport: str = "direct"
-    host: str = ""
     timeout: int = 300
     probe: Probe
 
@@ -166,10 +160,17 @@ _LIST_VARS_R = (
 )
 
 
+def _py_worker_cmd() -> list:
+    """The py worker's interpreter: INTERACTIVE_REPL_PY_BIN (a project's
+    conda-env python) or the server's own interpreter."""
+    py_bin = os.environ.get("INTERACTIVE_REPL_PY_BIN")
+    return [py_bin or sys.executable, str(WORKER)]
+
+
 def _r_worker_cmd() -> list:
     r_env = os.environ.get("INTERACTIVE_REPL_R_ENV")
     r_bin = os.environ.get("INTERACTIVE_REPL_R_BIN", "R")
-    argv = [r_bin, "--no-save", "--no-restore", "-f", str(REPL_R)]
+    argv = [r_bin, "--quiet", "--no-echo", "--no-save", "--no-restore", "-f", str(REPL_R)]
     return (["conda", "run", "-n", r_env, "--no-capture-output", *argv]
             if r_env else argv)
 
@@ -178,15 +179,13 @@ def _r_worker_cmd() -> list:
 # this file is shared glue (session pool, proxying, capping, slurm).
 _LANGUAGES = {
     "py": {
-        "cmd": lambda: [sys.executable, str(WORKER)],
-        "tcp": False,                  # stdio JSON lines
+        "cmd": _py_worker_cmd,
         "list_vars": _LIST_VARS_PY,
         "inspect": lambda name, path: f"print(repr({name}{''.join(f'[{p!r}]' for p in path)}))",
         "sidecar": "kernel.py",
     },
     "r": {
         "cmd": _r_worker_cmd,
-        "tcp": True,                   # R base socketConnection is TCP-only
         "list_vars": _LIST_VARS_R,
         "inspect": lambda name, path: (
             f"print(str({name}{''.join(f'[[{p!r}]]' for p in path)})); "
@@ -209,75 +208,80 @@ def _base_sidecar_src(lang: str) -> str:
 
 
 def _send(s: _Session, line: str) -> None:
-    if s.conn is not None:
-        s.conn.sendall(line.encode())
-    else:
-        s.proc.stdin.write(line)
-        s.proc.stdin.flush()
+    s.proc.stdin.write(line)
+    s.proc.stdin.flush()
 
 
-def _recv(s: _Session) -> str:
-    if s.conn is not None:
-        buf = b""
-        while not buf.endswith(b"\n"):
-            chunk = s.conn.recv(65536)
-            if not chunk:
-                raise OSError("connection closed")
-            buf += chunk
-        return buf.decode()
-    line = s.proc.stdout.readline()
-    if not line:
-        raise OSError("pipe closed")
-    return line
+def _recv(s: _Session, rid: str) -> dict:
+    """Read one response line whose id matches rid, skipping any non-JSON
+    garbage (R child-process output leaking onto stdout)."""
+    for _ in range(10000):  # sanity cap — a garbage flood shouldn't loop forever
+        line = s.proc.stdout.readline()
+        if not line:
+            raise OSError("pipe closed")
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict) and obj.get("id") == rid:
+            return obj
+    raise OSError("too much non-protocol output")
+
+
+def _read_ready(proc, timeout: float, hint: str) -> dict:
+    """Read the worker's ready handshake: the first line on stdout that parses
+    as JSON with a "ready" key, tolerant of stray banner/output lines, with a
+    deadline. Raises RuntimeError with the hint on timeout/EOF."""
+    sel = selectors.DefaultSelector()
+    sel.register(proc.stdout, selectors.EVENT_READ)
+    deadline = time.monotonic() + timeout
+    buf = ""
+    while time.monotonic() < deadline:
+        if not sel.select(max(0.0, deadline - time.monotonic())):
+            break
+        chunk = os.read(proc.stdout.fileno(), 65536)
+        if not chunk:
+            break
+        buf += chunk.decode(errors="replace")
+        while "\n" in buf:
+            line, buf = buf.split("\n", 1)
+            try:
+                obj = json.loads(line.strip())
+            except json.JSONDecodeError:
+                continue
+            if isinstance(obj, dict) and obj.get("ready") is not None:
+                return obj
+    raise RuntimeError(hint)
 
 
 def _start(lang: str, bare: str) -> _Session:
     spec = _LANGUAGES[lang]
     cmd = spec["cmd"]()
     if _slurm.slurm_enabled():
-        proc, conn, meta = _slurm.launch_remote(cmd)
-        s = _Session(proc, conn, meta["job_id"], meta["node"], meta["transport"])
-    elif spec["tcp"]:
-        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        srv.bind(("127.0.0.1", 0))
-        srv.listen(1)
-        srv.settimeout(30)
-        port = srv.getsockname()[1]
-        env = {**os.environ, "REPL_PORT": str(port)}
-        proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE, text=True)
-        conn = None
-        try:
-            conn, _ = srv.accept()
-            srv.close()  # accepted conn is independent of the listener
-            buf = b""
-            while not buf.endswith(b"\n"):
-                chunk = conn.recv(65536)
-                if not chunk:  # worker died before its ready line -> EOF,
-                    raise OSError("connection closed")  # not a silent busy-spin
-                buf += chunk
-            ready = json.loads(buf.decode())
-            if not ready.get("ready"):
-                raise RuntimeError(f"R worker failed to start: {ready!r} {proc.stderr.read()!r}")
-        except Exception:
-            proc.terminate()
-            if conn is not None:
-                conn.close()
-            srv.close()
-            raise
-        s = _Session(proc, conn)
+        proc = _slurm.launch(cmd)
+        timeout = _slurm.srun_timeout()
+        hint = (f"salloc allocation did not start within {timeout}s — check "
+                f"INTERACTIVE_REPL_SLURM flags and queue status (squeue). "
+                f"First call blocks until the allocation starts.")
     else:
-        p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE, text=True, bufsize=1)
-        ready = json.loads(p.stdout.readline())
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True, bufsize=1)
+        timeout = 30
+        hint = f"worker failed to start within {timeout}s"
+    try:
+        ready = _read_ready(proc, timeout, hint)
         if not ready.get("ready"):
-            raise RuntimeError(f"worker failed to start: {ready!r} {p.stderr.read()!r}")
-        s = _Session(p)
+            proc.terminate()
+            raise RuntimeError(f"worker failed to start: {ready!r}")
+    except RuntimeError:
+        proc.terminate()
+        raise
+    s = _Session(proc, job_id=ready.get("job_id"), node=ready.get("node"))
     # Auto-inject the base sidecar so _peek/_who/_fig are available immediately.
     base = _base_sidecar_src(lang)
     if base:
         _send(s, _common.encode_line({"id": "init", "code": base}))
-        _recv(s)  # discard the init response
+        _recv(s, "init")  # discard the init response
     return s
 
 
@@ -303,24 +307,23 @@ def _call_worker(session: str, code: str) -> dict:
     try:
         s = _get(lang, bare)
         _send(s, _common.encode_line({"id": rid, "code": code}))
-        line = _recv(s)
+        return _recv(s, rid)
     except (BrokenPipeError, OSError) as e:
         _sessions.pop(f"{lang}:{bare}", None)
         return {"stdout": "", "stderr": "", "error": f"worker died: {e}",
                 "plots": [], "truncated": False, "degraded": False}
     except RuntimeError as e:
-        # session-start failures (queue timeout, token mismatch, worker refused
-        # to start) surface as structured errors — raising here hangs the MCP
-        # request in the in-process client (exceptions are not auto-converted).
+        # session-start failures (queue timeout, worker refused to start)
+        # surface as structured errors — raising here hangs the MCP request
+        # in the in-process client (exceptions are not auto-converted).
         _sessions.pop(f"{lang}:{bare}", None)
         return {"stdout": "", "stderr": "", "error": str(e),
                 "plots": [], "truncated": False, "degraded": False}
-    return _common.decode_line(line)
 
 
 def _kill(s: _Session) -> bool:
-    """Teardown one session's worker: scancel (slurm), close the transport,
-    terminate the process. Returns True if a live worker was killed."""
+    """Teardown one session's worker: scancel (slurm), terminate the process.
+    Returns True if a live worker was killed."""
     if s.proc.poll() is not None:
         return False
     if s.job_id:
@@ -328,13 +331,6 @@ def _kill(s: _Session) -> bool:
             subprocess.run(["scancel", s.job_id], timeout=10, capture_output=True)
         except Exception:
             pass
-    try:
-        if s.conn is not None:
-            s.conn.close()
-        else:
-            s.proc.stdin.close()
-    except Exception:
-        pass
     try:
         s.proc.terminate(); s.proc.wait(timeout=2)
     except Exception:
@@ -443,7 +439,7 @@ def run_chunk(session: str, file: str, selector: str) -> RunChunkResult:
 @mcp.tool()
 def session_info(session: str) -> SessionInfo:
     """Report whether the named session is running, its pid, the plot dir, and
-    (slurm mode) the compute-node job id / node / transport."""
+    (slurm mode) the compute-node job id / node."""
     parsed = _parse_session(session)
     if parsed is None:
         return SessionInfo(session=session, running=False, error=_AMBIG)
@@ -454,33 +450,28 @@ def session_info(session: str) -> SessionInfo:
                        pid=s.proc.pid if running else None,
                        plot_dir=_common.plot_dir(),
                        job_id=s.job_id if running else None,
-                       node=s.node if running else None,
-                       transport=s.transport if running else "local")
+                       node=s.node if running else None)
 
 
 @mcp.tool()
-def worker_mode(mode: str = None, slurm_flags: str = None,
-                transport: str = None) -> WorkerModeInfo:
+def worker_mode(mode: str = None, slurm_flags: str = None) -> WorkerModeInfo:
     """Get or set how this server launches workers. No args = probe the
-    environment (srun present? already inside a job? ssh for tunnels?) and
-    report the current mode and its source ("env" default or "tool" override).
-    mode="local"|"slurm" switches; slurm_flags overrides
-    INTERACTIVE_REPL_SLURM (omit or pass "" to keep the env default);
-    transport="direct"|"tunnel" overrides INTERACTIVE_REPL_TRANSPORT. Tool
-    settings apply to sessions created after the switch (existing sessions
-    keep running until restart) and reset when the server restarts."""
+    environment (srun present? already inside a job?) and report the current
+    mode and its source ("env" default or "tool" override). mode="local"|"slurm"
+    switches; slurm_flags overrides INTERACTIVE_REPL_SLURM (omit or pass "" to
+    keep the env default). Slurm workers launch as `salloc <flags> srun
+    <worker>` (or bare `srun` when already inside an allocation), protocol
+    over stdio pipes. Tool settings apply to sessions created after the switch
+    (existing sessions keep running until restart) and reset when the server
+    restarts."""
     if mode is not None:
         _slurm.set_runtime(mode=mode)
     if slurm_flags is not None:
         _slurm.set_runtime(flags=slurm_flags)
-    if transport is not None:
-        _slurm.set_runtime(transport=transport)
     return WorkerModeInfo(
         mode="slurm" if _slurm.slurm_enabled() else "local",
         source="tool" if "mode" in _slurm._runtime else "env",
         slurm_flags=_slurm.flags(),
-        transport=_slurm.transport(),
-        host=_slurm.login_host(),
         timeout=_slurm.srun_timeout(),
         probe=Probe(**_slurm.probe()),
     )

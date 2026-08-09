@@ -1,4 +1,3 @@
-import socket
 import json, os, subprocess, sys, pathlib
 import pytest
 
@@ -170,46 +169,6 @@ def test_capture_new_figures_does_not_import_matplotlib(monkeypatch):
     assert python_worker._capture_new_figures() == []
     assert "matplotlib" not in sys.modules           # no import happened
     assert "matplotlib.pyplot" not in sys.modules
-
-
-def test_worker_tcp_mode_ready_and_roundtrip(monkeypatch, tmp_path):
-    """Slurm mode: REPL_PORT set → worker speaks JSON-per-line over a TCP
-    client socket; ready carries token + SLURM job info."""
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
-    srv = socket.socket()
-    srv.bind(("127.0.0.1", 0))
-    srv.listen(1)
-    port = srv.getsockname()[1]
-    monkeypatch.setenv("REPL_PORT", str(port))
-    monkeypatch.setenv("REPL_HOST", "127.0.0.1")
-    monkeypatch.setenv("REPL_TOKEN", "tok123")
-    monkeypatch.setenv("SLURM_JOB_ID", "999")
-    monkeypatch.setenv("SLURM_JOB_NODELIST", "cn001")
-    proc = subprocess.Popen([sys.executable, str(WORKER)], env=os.environ,
-                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-                            text=True)
-    try:
-        conn, _ = srv.accept()
-        buf = b""
-        while not buf.endswith(b"\n"):
-            buf += conn.recv(65536)
-        ready = json.loads(buf.decode())
-        assert ready["ready"] is True
-        assert ready["token"] == "tok123"
-        assert ready["job_id"] == "999"
-        assert ready["node"] == "cn001"
-        conn.sendall((json.dumps({"id": "r1", "code": "1 + 1"}) + "\n").encode())
-        buf = b""
-        while not buf.endswith(b"\n"):
-            buf += conn.recv(65536)
-        res = json.loads(buf.decode())
-        assert res["id"] == "r1"
-        assert res["error"] is None
-        assert "2" in res["stdout"]
-    finally:
-        conn.close()
-        proc.terminate()
-        srv.close()
 
 
 def test_worker_uses_preinstalled_py_site(monkeypatch, tmp_path):

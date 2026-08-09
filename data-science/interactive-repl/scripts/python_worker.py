@@ -10,8 +10,10 @@ Request:  {"id": "<rid>", "code": "<python source>"}
 Response: {"id": "<rid>", "stdout": "...", "stderr": "...", "error": null|"<traceback>",
            "plots": ["/path/to/fig.png"], "truncated": false, "degraded": false}
 
-Protocol pipes are duped off fd 0/1 so user subprocesses inheriting them can't
-corrupt the stream; real stdin/stdout → devnull. Errors are caught — the response
+Protocol channel: stdio pipes — local and slurm alike, because slurm runs this
+worker via salloc+srun, which forwards the pipes to the compute node. Protocol
+pipes are duped off fd 0/1 so user subprocesses inheriting them can't corrupt
+the stream; real stdin/stdout → devnull. Errors are caught — the response
 ALWAYS returns (no hangs). Adapted from wisp-science's kernel_worker.py.
 """
 import builtins, io, json, os, shutil, subprocess, sys, traceback, uuid
@@ -160,34 +162,10 @@ def _make_import_wrapper(_orig_import):
 
 
 def main():
-    # Protocol channel: TCP client when REPL_PORT is set (slurm/compute-node
-    # mode, launched via srun), else stdin/stdout pipes (local mode). Real
-    # stdin/stdout → devnull in both cases so user subprocesses inheriting
-    # them can't corrupt the stream.
-    port = os.environ.get("REPL_PORT")
-    if port:
-        import socket as _sock
-        import _slurm
-        host = os.environ.get("REPL_HOST", "localhost")
-        if os.environ.get("REPL_TRANSPORT") == "tunnel":
-            # ssh -fN -L <L>:localhost:<port> forwards the server's listener
-            # to this node; pick a free local port first. The foreground ssh
-            # exits 0 once the tunnel is up (check=True) — non-zero means
-            # bind collision / auth failure → fail fast.
-            s = _sock.socket()
-            s.bind(("127.0.0.1", 0))
-            local_port = s.getsockname()[1]
-            s.close()
-            subprocess.run(_slurm.tunnel_cmd(local_port, host, int(port)),
-                           check=True, timeout=30)
-            conn = _sock.create_connection(("127.0.0.1", local_port), timeout=30)
-        else:
-            conn = _sock.create_connection((host, int(port)), timeout=30)
-        protocol_in = conn.makefile("r", encoding="utf-8", errors="replace")
-        protocol_out = conn.makefile("w", encoding="utf-8", buffering=1)
-    else:
-        protocol_in = os.fdopen(os.dup(0), "r", encoding="utf-8", errors="replace")
-        protocol_out = os.fdopen(os.dup(1), "w", encoding="utf-8", buffering=1)
+    # Protocol channel: stdio pipes. Real stdin/stdout → devnull so user
+    # subprocesses inheriting them can't corrupt the stream.
+    protocol_in = os.fdopen(os.dup(0), "r", encoding="utf-8", errors="replace")
+    protocol_out = os.fdopen(os.dup(1), "w", encoding="utf-8", buffering=1)
     os.dup2(os.open(os.devnull, os.O_RDONLY), 0)
     os.dup2(os.open(os.devnull, os.O_WRONLY), 1)
 
@@ -217,11 +195,9 @@ def main():
     import linecache as _lc
     counter = 0
 
-    # Ready marker: token (validated by the server in slurm mode — an open
-    # port on a shared login node is an injection risk) + SLURM job info.
+    # Ready marker: SLURM job info (set by srun in slurm mode).
     protocol_out.write(_common.encode_line({
         "ready": True,
-        "token": os.environ.get("REPL_TOKEN", ""),
         "job_id": os.environ.get("SLURM_JOB_ID"),
         "node": os.environ.get("SLURM_JOB_NODELIST"),
     }))
