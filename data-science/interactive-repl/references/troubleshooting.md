@@ -67,10 +67,10 @@ diagnose and fix everything scriptable itself, in order:
 The `repl` server starts with only `mcp`+`pydantic` installed (so MCP startup
 stays fast and never times out). The heavy data-science deps (`numpy`, `matplotlib`,
 `pandas`) are fetched **on first import** by the worker into a persistent
-`${CLAUDE_PLUGIN_DATA}/py-site` dir via `uv pip install --target` (reuses `uv`'s wheel
-cache). So the first `import pandas` in a session takes a few seconds (one-time); after
-that it's instant, and later sessions reuse `py-site`. Only packages you actually import
-are fetched — no plotting, no `matplotlib`.
+`${CLAUDE_PLUGIN_DATA}/py-site-<ver>` dir via `uv pip install --target` (reuses `uv`'s
+wheel cache). So the first `import pandas` in a session takes a few seconds (one-time);
+after that it's instant, and later sessions reuse `py-site-<ver>`. Only packages you
+actually import are fetched — no plotting, no `matplotlib`.
 
 ## Context compaction mid-analysis
 
@@ -90,7 +90,6 @@ loaded data. Only restart after a crash or to deliberately reset for a fresh ana
   or the queue is busy. Check `squeue`, fix `INTERACTIVE_REPL_SLURM`, retry.
 - `worker died` after a slurm session started — the allocation expired or was
   preempted; `restart(session)` resubmits (fresh namespace — re-run the setup).
-- Tunnel mode fails at session start — ssh from the compute node to the login
-  node must be passwordless (`ssh login-node` with no prompt).
-- Plots from a compute-node session are missing — `CLAUDE_PLUGIN_DATA` points
-  at per-node storage; export it to shared storage (see `slurm-hpc.md`).
+- Plots from a compute-node session are missing — `CLAUDE_PLUGIN_DATA` lives
+  under `~/.claude/plugins/data/<plugin>` (injected, not overridable), so this
+  means the home is not shared across nodes (see `slurm-hpc.md`).

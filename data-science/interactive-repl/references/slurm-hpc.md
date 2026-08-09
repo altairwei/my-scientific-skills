@@ -37,11 +37,14 @@ server restarts.
 
 ## Prerequisites — read before using
 
-1. **`CLAUDE_PLUGIN_DATA` must point at shared storage.** The default
-   `/tmp/interactive-repl-data` is per-node: plots saved on a compute node
-   would be invisible on the login node, and the lazy-install `py-site-<ver>`
-   would be built twice. Export it to a shared path (e.g. under your home)
-   before using slurm mode.
+1. **The data dir must be on shared storage — and it is, by default.** Plots
+   and the lazy-install `py-site-<ver>` live under `CLAUDE_PLUGIN_DATA`, which
+   the plugin launcher injects at `~/.claude/plugins/data/<plugin>` (not
+   user-overridable). On standard HPC that path is under your home, which is
+   shared across nodes — compute-node workers see the same files, so nothing
+   to configure. Only a non-standard setup where home is NOT shared across
+   nodes needs intervention (symlink the dir to shared storage as a
+   workaround).
 2. Login and compute nodes share home (standard on HPC) — this is what makes
    the worker scripts, the uv-managed python, R/conda envs and `uv` available
    on the compute node. No ssh or port-forwarding setup is needed: srun
@@ -69,8 +72,8 @@ server restarts.
 - `salloc allocation did not start within 300s` — flags wrong (bad
   partition/account) or queue busy; check `squeue`, fix flags, retry.
 - `worker died` mid-session — allocation expired or was preempted → `restart`.
-- Plots not readable after slurm sessions — `CLAUDE_PLUGIN_DATA` is not on
-  shared storage (see Prerequisites).
+- Plots not readable after slurm sessions — the home (and with it
+  `~/.claude/plugins/data`) is not shared across nodes (see Prerequisites).
 
 ## Escape hatch
 

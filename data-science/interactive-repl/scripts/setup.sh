@@ -10,8 +10,11 @@
 #   scripts/setup.sh                   # check + install what's missing; report status
 #   scripts/setup.sh --r               # also install the R packages (jsonlite,
 #                                      #   knitr, ggplot2) — heavy, opt-in
-#   CLAUDE_PLUGIN_DATA=... setup.sh    # install into a custom data dir (HPC:
-#                                      #   point at SHARED storage, see SKILL.md)
+#   CLAUDE_PLUGIN_DATA=... setup.sh    # install into a custom data dir. In
+#                                      #   plugin use the real data dir is
+#                                      #   injected by Claude Code
+#                                      #   (~/.claude/plugins/data/<plugin>) —
+#                                      #   see SKILL.md setup step 2.
 #
 # Exit code 0 = python side fully ready; R status is reported separately.
 #

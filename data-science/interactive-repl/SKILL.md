@@ -37,7 +37,15 @@ with a checklist of commands for the user to run.
    missing and installs ALL python runtime deps (`mcp pydantic numpy pandas
    matplotlib`) into the worker's version-keyed `py-site-<ver>` in a single
    `uv pip install --target` — no mid-session lazy-install stalls, and once
-   cached it works offline. Report its output; fix anything it flags.
+   cached it works offline. **Point it at the server's real data dir**: the
+   plugin launcher injects `CLAUDE_PLUGIN_DATA` (→ `~/.claude/plugins/data/<plugin>`,
+   not user-overridable) only into the MCP server process, not your shell. If
+   the REPL tools are live, probe `session_info` and take `plot_dir`'s parent;
+   otherwise pick the matching entry under `~/.claude/plugins/data/`. Then run
+   `CLAUDE_PLUGIN_DATA=<that dir> scripts/setup.sh` — plain `setup.sh` would
+   warm the `/tmp` fallback instead (harmless: uv's wheel cache is shared, so
+   the worker's lazy-install just copies). Report its output; fix anything it
+   flags.
 3. **Environments — ask the user, then write project-level config.** Run the
    skill's discovery scanner `scripts/discover.py` (Positron-style multi-source:
    PATH, conda envs via `conda env list --json` with `~/.conda/environments.txt`
@@ -157,8 +165,10 @@ login node. `worker_mode()` on the server probes the environment
 between `local` and `slurm` launch — call it before heavy work when the user
 mentions clusters/queues/partitions. Slurm sessions are tied to the
 allocation: expiry surfaces as `worker died` → `restart` resubmits (fresh
-namespace). Requires shared storage for plots (`CLAUDE_PLUGIN_DATA`) — see
-`references/slurm-hpc.md`.
+namespace). Plots and py-site live in `CLAUDE_PLUGIN_DATA`, injected by the
+plugin launcher at `~/.claude/plugins/data/<plugin>` (not user-overridable) —
+on standard HPC that home is shared across nodes, so compute-node workers see
+the same files automatically. See `references/slurm-hpc.md`.
 
 ## Ad-hoc inspection is first-class
 
