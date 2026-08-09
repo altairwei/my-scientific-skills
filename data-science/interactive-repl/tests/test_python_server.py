@@ -344,3 +344,51 @@ async def test_run_code_fields_interrupted_trace_usage(monkeypatch, tmp_path):
         assert "d['missing']" in sc["trace"]["error_call"]
         assert sc["usage"]["wall_s"] >= 0
         assert sc["usage"]["peak_rss_kb"] > 0
+
+
+@pytest.mark.asyncio
+async def test_interrupt_tool_cancels_running_cell(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from repl_server import mcp
+    import asyncio
+    async with Client(mcp) as client:
+        task = asyncio.create_task(
+            client.call_tool("run_code", {"session": "py:int1", "code": "import time; time.sleep(30)"}))
+        await asyncio.sleep(0.8)                 # let the cell start
+        ack = await client.call_tool("interrupt", {"session": "py:int1"})
+        sc = ack.structured_content
+        assert sc["ok"] is True and sc["interrupted"] is True
+        r = await task
+        assert r.structured_content["interrupted"] is True
+        r2 = await client.call_tool("run_code", {"session": "py:int1", "code": "1 + 1"})
+        assert r2.structured_content["error"] is None   # worker survived
+
+
+@pytest.mark.asyncio
+async def test_interrupt_idle_session_rejected(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from repl_server import mcp
+    async with Client(mcp) as client:
+        ack = (await client.call_tool("interrupt", {"session": "py:int2"})).structured_content
+        assert ack["ok"] is False
+        assert "no cell running" in ack["message"] or "not running" in ack["message"]
+
+
+@pytest.mark.asyncio
+async def test_busy_session_rejects_second_call(monkeypatch, tmp_path):
+    """A second run_code on a session with a cell in flight returns 'session
+    busy' instead of interleaving on the pipe."""
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from repl_server import mcp
+    import asyncio
+    async with Client(mcp) as client:
+        task = asyncio.create_task(
+            client.call_tool("run_code", {"session": "py:busy1", "code": "import time; time.sleep(5)"}))
+        await asyncio.sleep(0.8)
+        r = await client.call_tool("run_code", {"session": "py:busy1", "code": "1 + 1"})
+        assert "busy" in (r.structured_content["error"] or "")
+        await client.call_tool("interrupt", {"session": "py:busy1"})
+        await task

@@ -294,6 +294,31 @@ async def test_worker_mode_switch_does_not_affect_existing_sessions(monkeypatch,
 
 
 @pytest.mark.asyncio
+async def test_slurm_interrupt_scancels_signal(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    monkeypatch.setenv("INTERACTIVE_REPL_SLURM", "-c 4")
+    _install_shims(tmp_path, monkeypatch)
+    _slurm.reset_runtime()  # clear any worker_mode() tool override left by prior tests
+    from mcp import Client
+    from repl_server import mcp
+    import asyncio
+    async with Client(mcp) as client:
+        task = asyncio.create_task(
+            client.call_tool("run_code", {"session": "py:sint1", "code": "import time; time.sleep(30)"}))
+        # retry until the cell is actually running (worker startup varies with speed)
+        ack = None
+        for _ in range(50):
+            await asyncio.sleep(0.1)
+            ack = await client.call_tool("interrupt", {"session": "py:sint1"})
+            if ack.structured_content["ok"]:
+                break
+        assert ack is not None and ack.structured_content["ok"] is True
+        assert "--signal=INT 4242" in (tmp_path / "scancel.log").read_text()
+        task.cancel()
+        await asyncio.sleep(0)
+
+
+@pytest.mark.asyncio
 async def test_worker_mode_r_server_smoke(monkeypatch, tmp_path):
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
     from mcp import Client

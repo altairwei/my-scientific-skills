@@ -600,6 +600,27 @@ def close(session: str) -> Ack:
 
 
 @mcp.tool()
+def interrupt(session: str) -> InterruptAck:
+    """Interrupt the cell currently running in the session — the worker
+    survives with its namespace (the response arrives as interrupted=true).
+    Local sessions: SIGINT to the worker process. Slurm sessions:
+    scancel --signal=INT on the job (job id from the ready handshake).
+    Rejected with ok=false when no cell is running (the server never signals
+    an idle worker — R cannot survive that) or the session is gone."""
+    parsed = _parse_session(session)
+    if parsed is None:
+        return InterruptAck(ok=False, message=_AMBIG)
+    lang, bare = parsed
+    s = _sessions.get(f"{lang}:{bare}")
+    if s is None or s.proc.poll() is not None:
+        return InterruptAck(ok=False, message=f"session '{session}' is not running")
+    if not s.lock.locked():
+        return InterruptAck(ok=False, message="no cell running in this session")
+    ok, msg = _interrupt_proc(s)
+    return InterruptAck(ok=ok, interrupted=ok, message=msg)
+
+
+@mcp.tool()
 def list_variables(session: str) -> VarList:
     """List variables in the session namespace with type/size/preview summaries."""
     parsed = _parse_session(session)
