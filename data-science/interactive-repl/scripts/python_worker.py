@@ -183,6 +183,79 @@ def _lazy_install(top):
         return False
 
 
+def _cpu_seconds():
+    """Total CPU time (user+sys) of this process and its reaped children."""
+    s = resource.getrusage(resource.RUSAGE_SELF)
+    c = resource.getrusage(resource.RUSAGE_CHILDREN)
+    return s.ru_utime + s.ru_stime + c.ru_utime + c.ru_stime
+
+
+def _peak_rss_kb():
+    """Peak RSS in KB: /proc/self/status VmHWM (Linux), getrusage elsewhere
+    (macOS ru_maxrss is bytes → /1024)."""
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmHWM:"):
+                    return int(line.split()[1])
+    except OSError:
+        pass
+    try:
+        maxrss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        if sys.platform == "darwin":
+            maxrss //= 1024
+        return maxrss
+    except Exception:
+        return 0
+
+
+def _error_lineno(exc, cell_tag):
+    """Line number of the deepest frame whose co_filename is the cell tag —
+    distinguishes THIS cell's frames from functions defined in prior cells."""
+    tb = getattr(exc, "__traceback__", None)
+    lineno = None
+    while tb is not None:
+        if tb.tb_frame.f_code.co_filename == cell_tag:
+            lineno = tb.tb_lineno
+        tb = tb.tb_next
+    return lineno
+
+
+def _error_call(exc, cell_tag, code):
+    """Failing-expression text of the deepest cell frame, via PEP 657
+    byte-precise column positions (Python 3.11+); ≤200 chars; None when
+    positions are unavailable. Failure-safe: any hostile exception object
+    classifies as None, never escapes."""
+    try:
+        tb = getattr(exc, "__traceback__", None)
+        hit = None
+        while tb is not None:
+            if tb.tb_frame.f_code.co_filename == cell_tag:
+                hit = tb
+            tb = tb.tb_next
+        if hit is None:
+            return None
+        import itertools
+        pos = next(itertools.islice(hit.tb_frame.f_code.co_positions(),
+                                    hit.tb_lasti // 2, None), None)
+        if pos is None:
+            return None
+        lineno, end_lineno, col, end_col = pos
+        if lineno is None or col is None or end_col is None:
+            return None
+        lines = code.split("\n")
+        # PEP 657 cols are UTF-8 BYTE offsets — slice the encoded line
+        raw = lines[lineno - 1].encode("utf-8")
+        if end_lineno is not None and end_lineno != lineno:
+            seg = raw[col:].decode("utf-8", "replace")
+        else:
+            seg = raw[col:end_col].decode("utf-8", "replace")
+        seg = seg.strip()
+        return seg[:200] if seg else None
+    except BaseException:
+        return None
+
+
 def _make_import_wrapper(_orig_import):
     """Wrap builtins.__import__: on ModuleNotFoundError for a lazy pkg, install it
     into py-site and retry; configure pandas / neutralize plt.show on first import."""
@@ -227,6 +300,23 @@ def main():
     os.set_inheritable(protocol_out.fileno(), False)
     os.dup2(os.open(os.devnull, os.O_RDONLY), 0)
     os.dup2(os.open(os.devnull, os.O_WRONLY), 1)
+
+    # Conditional SIGINT discipline: raise KeyboardInterrupt ONLY while user
+    # code is executing (one-shot, self-clears); swallow the signal anywhere
+    # else (idle readline, json handling, response write) so the worker loop
+    # and namespace survive. The marker distinguishes a DELIVERED SIGINT from
+    # a user-written `raise KeyboardInterrupt` (which is an ordinary error).
+    _in_user_code = [False]
+    _sigint_delivered = [False]
+
+    def _sigint_handler(signum, frame):
+        if _in_user_code[0]:
+            _in_user_code[0] = False
+            _sigint_delivered[0] = True
+            ki = KeyboardInterrupt()
+            ki._repl_delivered = True
+            raise ki
+    signal.signal(signal.SIGINT, _sigint_handler)
 
     import _common
 
@@ -308,17 +398,30 @@ def main():
         out_cap, err_cap = _CappedStringIO(), _CappedStringIO()
         error = None
         interrupted = False
+        trace = None
         old_out, old_err = sys.stdout, sys.stderr
+        wall0 = time.perf_counter()
+        cpu0 = _cpu_seconds()
         try:
+            _in_user_code[0] = True
             sys.stdout, sys.stderr = out_cap, err_cap
             _execute_cell(code, cell_tag, namespace)
+            _in_user_code[0] = False
         except BaseException as e:
+            _in_user_code[0] = False
             interrupted = bool(getattr(e, "_repl_delivered", False))
             error = traceback.format_exc()
             if isinstance(e, _ReplQuitterExit):
                 error += ("\n(exit()/quit() is disabled here — close the session "
                           "with the `close(session)` tool.)")
+            if isinstance(e, SyntaxError):
+                lineno = getattr(e, "lineno", None)
+            else:
+                lineno = _error_lineno(e, cell_tag)
+            trace = {"error_lineno": lineno,
+                     "error_call": _error_call(e, cell_tag, code)}
         finally:
+            _in_user_code[0] = False
             sys.stdout, sys.stderr = old_out, old_err
 
         plots = _capture_new_figures()
@@ -330,10 +433,15 @@ def main():
         degraded = not raw_stdout.strip() and bool(raw_stderr.strip())
         if degraded:
             stdout = _common.never_empty(stdout, raw_stderr)
+        usage = {
+            "wall_s": round(time.perf_counter() - wall0, 3),
+            "cpu_s": round(_cpu_seconds() - cpu0, 3),
+            "peak_rss_kb": _peak_rss_kb(),
+        }
         protocol_out.write(_common.encode_line({
             "id": rid, "stdout": stdout, "stderr": raw_stderr, "error": error,
             "plots": plots, "truncated": truncated, "degraded": degraded,
-            "interrupted": interrupted}))
+            "interrupted": interrupted, "trace": trace, "usage": usage}))
         protocol_out.flush()
 
 

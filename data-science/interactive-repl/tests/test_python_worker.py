@@ -1,4 +1,4 @@
-import json, os, subprocess, sys, pathlib
+import json, os, signal, subprocess, sys, pathlib, time
 import pytest
 
 import python_worker
@@ -276,6 +276,71 @@ def test_sys_exit_not_blamed_on_quitter():
         assert "disabled" not in r["error"]   # marker gate: not the shadow quitter
         r2 = _call(p, "1 + 1")
         assert r2["error"] is None
+    finally:
+        p.stdin.close(); p.terminate()
+
+
+# ---- SIGINT discipline + interrupted/trace/usage -----------------------------
+
+def test_sigint_interrupts_cell_keeps_worker(monkeypatch):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", "/tmp/x")
+    p = _spawn()
+    try:
+        p.stdin.write(json.dumps({"id": "t", "code": "import time; time.sleep(30)"}) + "\n")
+        p.stdin.flush()
+        time.sleep(1.0)
+        p.send_signal(signal.SIGINT)
+        r = json.loads(p.stdout.readline())
+        assert r["interrupted"] is True
+        assert "KeyboardInterrupt" in r["error"]
+        # namespace + worker survive
+        r2 = _call(p, "1 + 1")
+        assert r2["error"] is None and "2" in r2["stdout"]
+        assert r2["interrupted"] is False
+    finally:
+        p.stdin.close(); p.terminate()
+
+
+def test_sigint_while_idle_is_swallowed():
+    p = _spawn()
+    try:
+        p.send_signal(signal.SIGINT)          # idle: blocked in readline
+        time.sleep(0.3)
+        r = _call(p, "1 + 1")
+        assert r["error"] is None and "2" in r["stdout"]
+    finally:
+        p.stdin.close(); p.terminate()
+
+
+def test_user_raised_keyboardinterrupt_is_not_interrupted():
+    p = _spawn()
+    try:
+        r = _call(p, "raise KeyboardInterrupt")
+        assert r["interrupted"] is False      # delivered-SIGINT marker distinguishes it
+        assert "KeyboardInterrupt" in r["error"]
+    finally:
+        p.stdin.close(); p.terminate()
+
+
+def test_error_attribution_trace():
+    p = _spawn()
+    try:
+        r = _call(p, "d = {'a': 1}\nd['missing']")
+        assert r["error"] is not None
+        t = r["trace"]
+        assert t["error_lineno"] == 2
+        assert "d['missing']" in t["error_call"]
+    finally:
+        p.stdin.close(); p.terminate()
+
+
+def test_usage_fields_present():
+    p = _spawn()
+    try:
+        r = _call(p, "x = 0\nfor i in range(1000000): x += i")
+        u = r["usage"]
+        assert u["wall_s"] >= 0 and u["cpu_s"] >= 0
+        assert u["peak_rss_kb"] > 0
     finally:
         p.stdin.close(); p.terminate()
 
