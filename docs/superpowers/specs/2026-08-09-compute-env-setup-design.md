@@ -26,6 +26,18 @@ is excellent but it cannot be copied verbatim:
    SKILL.md budget is ≤5k tokens / 500 lines, description ≤100 tokens), and its
    description triggers reference nonexistent concepts.
 
+There is also a gap in the external skill: it assumes US-centric infrastructure
+and never mentions software-source/mirror switching. For our context
+(China-based users), timeouts against default package sources are the #1 cause
+of env-setup failure for beginners. This design adds a first-class mirror
+switching step, led by [chsrc](https://github.com/RubyMetric/chsrc) — a single
+C11 binary (dual GPL-3.0+/MIT license; install
+`curl https://chsrc.run/posix | bash`) that switches mirrors for 65+ targets
+(pip, conda, apt, docker hub, npm, R/CRAN, Julia, …) with automatic speed
+testing. Notable limitation: **no GitHub target** — git clone timeouts need a
+manual fallback. Teaching users to *run* chsrc is not copying it, so no
+licensing concern for the skill itself.
+
 ## Goal
 
 A tool-agnostic `compute-env-setup` skill that teaches Claude Code to:
@@ -73,17 +85,20 @@ computing-infrastructure/compute-env-setup/
 |---|---|---|
 | frontmatter | `name: compute-env-setup`; `description` ≤100 tokens, "Use when…" with concrete triggers (create conda env, install toolchain, slurm, docker image, rebuild env, diagnose env failure) | repo conventions |
 | Overview | One declarative spec says what an env *is*; build/register/resolve per backend; **read the private ledger before building anything** | external §Overview, rewritten |
+| Mirror switching (软件源) — **first-class, right after Overview** | Before installing anything, verify the current source (`chsrc get <target>`); if downloads are slow or timing out, switch mirrors. Primary tool: **chsrc** — single binary, install `curl https://chsrc.run/posix | bash`; commands `chsrc set <target>` (auto speed-test), `chsrc set <target> first`, `chsrc set <target> <mirror>`, `chsrc list`, `chsrc measure`, `chsrc reset`, flags `-dry`, `-scope=project|user|system`. Per shape: conda/venv → `chsrc set conda` + `chsrc set pip`; Docker → `chsrc set docker` (registry mirror); direct SSH → install chsrc on the host, run there; Slurm → mirrors on the login node (compute nodes lack egress anyway). GitHub is **not** covered by chsrc — git-clone timeouts need a manual fallback (`git config --global url.<prefix>.insteadOf https://github.com/`), stated as one line. | new — user's core requirement |
 | Provider shapes | local conda/venv · Docker local build · direct SSH host · Slurm/PBS cluster. Per shape: what "build", "register", "resolve" mean. Slurm essentials: module load / apptainer, `--account/--partition/--time` often mandatory, compute nodes often lack egress | external §Provider shapes, minus bridge/byoc |
 | Declarative spec | fields `base / system_pkgs / pip_phases / env / run_commands / shim_files / weight_dirs / smoke probes`; keep the "pip_phases ordering is the fix" insight; drop `ENVS[]/ENV_TABLE` runtime references | external §The declarative spec, rewritten |
 | Validation ladder | import works → kernel-dispatch witness (seeded minimal task printing a sentinel) → sub-agent follows the doc verbatim; third level expensive, run after rebuild/doc edit and before declaring ready | external §Validation, kept |
-| Diagnosis table | ~10 most universal rows: SM-version mismatch, numpy alias removal, `libfoo.so` loader path, force_reinstall snap-back, completion-marker files, RO-mount lockfile writes, `--config` overriding CLI, thread storm, job COMPLETED with empty output; mark container-only rows | external §Diagnosing, trimmed |
+| Diagnosis table | ~13 rows: the ~10 most universal rows (SM-version mismatch, numpy alias removal, `libfoo.so` loader path, force_reinstall snap-back, completion-marker files, RO-mount lockfile writes, `--config` overriding CLI, thread storm, job COMPLETED with empty output; mark container-only rows) **plus 3 network/mirror rows**: pip `ReadTimeoutError`/`Could not fetch URL … connection broken` → `chsrc set pip` + retry; conda `CondaHTTPError: HTTP 000 CONNECTION FAILED` → `chsrc set conda`; apt `Failed to fetch … Connection timed out` → `sudo chsrc set ubuntu\|debian` + `apt update` | external §Diagnosing, trimmed + new network rows |
 | Private ledger | `### env: <name>` block format (how / tier / weights / validated / gotcha); location `$SCIENTIFIC_ENVS_DIR` or default `~/.config/scientific-envs/<host>.md`, one file per host; read-before-write, append new blocks, replace stale lines | external §compute_details, adapted to a private file convention |
 | Reference pointer | when to read references/envs_reference.md | — |
 
 ### references/envs_reference.md
 
 Four original generic examples echoing the repo's own toolchains, each with
-base / apt / pip_phases (with the *why*) / validation commands / gotchas:
+base / apt / pip_phases (with the *why*) / validation commands / gotchas, and
+**each starting with the mirror-check step** (`chsrc get`/`chsrc set`) before
+any build phase:
 
 1. `eda-cpu` — pandas/numpy/scikit-learn stack (echoes
    exploratory-data-analysis skill).
@@ -100,10 +115,12 @@ All examples use placeholder host/version identifiers, no real hosts.
 
 Follow superpowers:writing-skills TDD for skills:
 
-- **RED** — run 2-3 pressure scenarios with sub-agents *without* the skill
+- **RED** — run 3-4 pressure scenarios with sub-agents *without* the skill
   (create an env and record it / deploy to a cluster / diagnose an
-  ImportError); document baseline behavior verbatim. Scenarios use fictional
-  hostnames; no real environments touched.
+  ImportError / **pip install that times out** — expect the no-skill baseline
+  to retry blindly or add `--timeout` instead of switching mirrors); document
+  baseline behavior verbatim. Scenarios use fictional hostnames; no real
+  environments touched.
 - **GREEN** — write the skill; re-run same scenarios; verify behavior change.
 - **REFACTOR** — close loopholes found in testing; re-test.
 - CLAUDE.md local loop: copy to `~/.claude/skills/`, try trigger / non-trigger
