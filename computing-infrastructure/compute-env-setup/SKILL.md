@@ -1,6 +1,6 @@
 ---
 name: compute-env-setup
-description: Use when setting up or recording scientific compute environments — conda/venv, Docker, direct SSH hosts, Slurm/PBS clusters. Triggers: "create conda env", "install toolchain", "switch software source"/"换源", "pip timeout", "slurm", "module load", "rebuild env", "what's in <env>".
+description: Use when setting up or recording scientific compute environments — conda/venv, Docker, direct SSH hosts, Slurm/PBS clusters. Triggers on "create conda env", "install toolchain", "switch software source"/"换源", "pip timeout", "slurm", "module load", "rebuild env", "what's in <env>".
 metadata:
   author: Altair Wei
   version: "1.0"
