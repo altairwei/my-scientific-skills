@@ -8,7 +8,7 @@
 the session name — 'r:<name>' spawns an R worker (repl.R), 'py:<name>' spawns
 python_worker.py. Language-specific bits live in _LANGUAGES; everything else
 is shared glue (session pool, proxying, capping, slurm)."""
-import json, os, selectors, subprocess, sys, time, uuid
+import json, os, selectors, signal, subprocess, sys, threading, time, uuid
 from pathlib import Path
 from pydantic import BaseModel, Field
 from mcp.server import MCPServer
@@ -33,6 +33,7 @@ class _Session:
         self.proc = proc
         self.job_id = job_id
         self.node = node
+        self.lock = threading.Lock()  # one in-flight request per session
 
 
 _sessions: dict[str, _Session] = {}
@@ -48,6 +49,23 @@ def _parse_session(name: str):
     return None
 
 
+class TraceInfo(BaseModel):
+    error_lineno: int | None = None
+    error_call: str | None = None
+
+
+class UsageInfo(BaseModel):
+    wall_s: float = 0.0
+    cpu_s: float = 0.0
+    peak_rss_kb: int = 0
+
+
+class InterruptAck(BaseModel):
+    ok: bool
+    interrupted: bool = False
+    message: str = ""
+
+
 class RunResult(BaseModel):
     stdout: str
     stderr: str
@@ -55,6 +73,9 @@ class RunResult(BaseModel):
     plots: list[str] = Field(default_factory=list)
     truncated: bool = False
     degraded: bool = False
+    interrupted: bool = False
+    trace: TraceInfo | None = None
+    usage: UsageInfo | None = None
 
 
 class ChunkRan(BaseModel):
@@ -212,15 +233,34 @@ def _send(s: _Session, line: str) -> None:
     s.proc.stdin.flush()
 
 
-def _recv(s: _Session, rid: str) -> dict:
+def _recv(s: _Session, rid: str, timeout: float | None = None) -> dict:
     """Read one response line whose id matches rid, skipping any non-JSON
-    garbage (R child-process output leaking onto stdout)."""
+    garbage (R child-process output leaking onto stdout). With timeout=None,
+    blocks until the response (worker death → OSError). With a timeout, raises
+    TimeoutError when no matching line arrives in time.
+
+    Uses os.read chunks (like _read_ready), NOT readline: the BufferedReader's
+    read-ahead can hold a complete response while the fd shows no data — a
+    select+readline deadline would false-timeout and auto-interrupt an idle
+    worker (killing the R one). The per-call buffer is safe because the
+    per-session lock serializes reads."""
+    sel = selectors.DefaultSelector()
+    sel.register(s.proc.stdout, selectors.EVENT_READ)
+    deadline = None if timeout is None else time.monotonic() + timeout
+    buf = ""
     for _ in range(10000):  # sanity cap — a garbage flood shouldn't loop forever
-        line = s.proc.stdout.readline()
-        if not line:
-            raise OSError("pipe closed")
+        while "\n" not in buf:
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or not sel.select(remaining):
+                    raise TimeoutError("no response within timeout")
+            chunk = os.read(s.proc.stdout.fileno(), 65536)
+            if not chunk:
+                raise OSError("pipe closed")
+            buf += chunk.decode(errors="replace")
+        line, buf = buf.split("\n", 1)
         try:
-            obj = json.loads(line)
+            obj = json.loads(line.strip())
         except json.JSONDecodeError:
             continue
         if isinstance(obj, dict) and obj.get("id") == rid:
@@ -297,7 +337,7 @@ def _get(lang: str, bare: str) -> _Session:
 _AMBIG = "ambiguous session name — use 'r:<name>' or 'py:<name>'"
 
 
-def _call_worker(session: str, code: str) -> dict:
+def _call_worker(session: str, code: str, timeout: float | None = None) -> dict:
     parsed = _parse_session(session)
     if parsed is None:
         return {"stdout": "", "stderr": "", "error": _AMBIG,
@@ -306,8 +346,26 @@ def _call_worker(session: str, code: str) -> dict:
     rid = uuid.uuid4().hex
     try:
         s = _get(lang, bare)
-        _send(s, _common.encode_line({"id": rid, "code": code}))
-        return _recv(s, rid)
+        if not s.lock.acquire(blocking=False):
+            return {"stdout": "", "stderr": "",
+                    "error": f"session {lang}:{bare} is busy running a cell — "
+                             f"wait for it to finish or call interrupt(session)",
+                    "plots": [], "truncated": False, "degraded": False}
+        try:
+            _send(s, _common.encode_line({"id": rid, "code": code}))
+            try:
+                return _recv(s, rid, timeout)
+            except TimeoutError:
+                _interrupt_proc(s)  # auto-interrupt once; the worker survives
+                try:
+                    return _recv(s, rid, _GRACE)
+                except TimeoutError:
+                    return {"stdout": "", "stderr": "",
+                            "error": "cell unresponsive after interrupt — "
+                                     "call restart(session)",
+                            "plots": [], "truncated": False, "degraded": False}
+        finally:
+            s.lock.release()
     except (BrokenPipeError, OSError) as e:
         _sessions.pop(f"{lang}:{bare}", None)
         return {"stdout": "", "stderr": "", "error": f"worker died: {e}",
@@ -319,6 +377,29 @@ def _call_worker(session: str, code: str) -> dict:
         _sessions.pop(f"{lang}:{bare}", None)
         return {"stdout": "", "stderr": "", "error": str(e),
                 "plots": [], "truncated": False, "degraded": False}
+
+
+_GRACE = 10  # seconds to wait for a response after an auto-interrupt
+
+
+def _interrupt_proc(s: _Session) -> tuple[bool, str]:
+    """Interrupt the running cell: SIGINT to the worker (local) or
+    scancel --signal=INT on the job (slurm — salloc/srun local signal
+    forwarding is unreliable). Returns (ok, message)."""
+    if s.proc.poll() is not None:
+        return False, "worker not running"
+    if s.job_id:
+        try:
+            subprocess.run(["scancel", "--signal=INT", s.job_id], timeout=10,
+                           capture_output=True)
+            return True, f"sent SIGINT to slurm job {s.job_id}"
+        except Exception as e:
+            return False, f"scancel failed: {e}"
+    try:
+        os.kill(s.proc.pid, signal.SIGINT)
+        return True, f"sent SIGINT to worker pid {s.proc.pid}"
+    except OSError as e:
+        return False, f"signal failed: {e}"
 
 
 def _kill(s: _Session) -> bool:
@@ -346,6 +427,9 @@ def _to_run_result(r: dict) -> RunResult:
         plots=r.get("plots") or [],
         truncated=r.get("truncated", False),
         degraded=r.get("degraded", False),
+        interrupted=r.get("interrupted", False),
+        trace=TraceInfo(**r["trace"]) if r.get("trace") else None,
+        usage=UsageInfo(**r["usage"]) if r.get("usage") else None,
     )
 
 
@@ -355,11 +439,15 @@ def run_code(session: str, code: str, timeout: int = 300) -> RunResult:
     name carries the language: 'r:<name>' for R, 'py:<name>' for Python
     (auto-created on first call). Variables, imports, and loaded data persist
     across calls. Returns stdout, stderr, error (traceback or condition), plots
-    (saved-PNG paths), and truncated/degraded flags.
+    (saved-PNG paths), truncated/degraded flags, interrupted (a delivered
+    SIGINT), trace (error line + failing expression), and usage (wall/cpu/peak
+    RSS).
 
-    The `timeout` parameter is advisory in v1 — the worker blocks until the code
-    returns; a stuck cell surfaces as a worker-died error (call `restart`)."""
-    return _to_run_result(_call_worker(session, code))
+    The `timeout` bounds the call: on expiry the server interrupts the cell
+    once (the worker survives, `interrupted=true`), waits a grace period, and
+    only reports 'cell unresponsive' if the cell ignores SIGINT. A busy
+    session returns 'session busy' instead of interleaving on the pipe."""
+    return _to_run_result(_call_worker(session, code, timeout=timeout))
 
 
 @mcp.tool()

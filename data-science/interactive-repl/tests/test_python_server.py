@@ -1,6 +1,7 @@
 import json
 import pathlib
 import sys
+import time
 
 import pytest
 
@@ -289,3 +290,57 @@ async def test_py_bin_env_selects_interpreter(monkeypatch, tmp_path):
         assert r.structured_content["error"] is None
         assert "2" in r.structured_content["stdout"]
     assert _sessions["py:pybin1"].proc.args[0] == str(shim)  # env selected the interpreter
+
+
+@pytest.mark.asyncio
+async def test_run_code_timeout_auto_interrupts(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from repl_server import mcp
+    async with Client(mcp) as client:
+        t0 = time.monotonic()
+        r = await client.call_tool("run_code",
+                                   {"session": "py:tmo1", "code": "import time; time.sleep(30)",
+                                    "timeout": 1})
+        sc = r.structured_content
+        assert time.monotonic() - t0 < 15          # did NOT wait for the 30 s sleep
+        assert sc["interrupted"] is True
+        assert "KeyboardInterrupt" in (sc["error"] or "")
+        # worker survived the auto-interrupt
+        r2 = await client.call_tool("run_code", {"session": "py:tmo1", "code": "1 + 1"})
+        assert r2.structured_content["error"] is None
+
+
+@pytest.mark.asyncio
+async def test_run_code_timeout_unresponsive_reports_restart(monkeypatch, tmp_path):
+    """A cell that ignores SIGINT (SIG_IGN replaces the worker's handler) →
+    'cell unresponsive' after interrupt + grace, worker NOT killed."""
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from repl_server import mcp
+    async with Client(mcp) as client:
+        r = await client.call_tool("run_code",
+                                   {"session": "py:tmo2",
+                                    "code": "import signal, time; signal.signal(signal.SIGINT, signal.SIG_IGN); time.sleep(30)",
+                                    "timeout": 1})
+        sc = r.structured_content
+        assert "unresponsive" in (sc["error"] or "")
+        # worker still alive (not killed by the server) and the cell keeps running
+        si = (await client.call_tool("session_info", {"session": "py:tmo2"})).structured_content
+        assert si["running"] is True
+
+
+@pytest.mark.asyncio
+async def test_run_code_fields_interrupted_trace_usage(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    from mcp import Client
+    from repl_server import mcp
+    async with Client(mcp) as client:
+        r = await client.call_tool("run_code",
+                                   {"session": "py:tr1", "code": "d = {'a': 1}\nd['missing']"})
+        sc = r.structured_content
+        assert sc["interrupted"] is False
+        assert sc["trace"]["error_lineno"] == 2
+        assert "d['missing']" in sc["trace"]["error_call"]
+        assert sc["usage"]["wall_s"] >= 0
+        assert sc["usage"]["peak_rss_kb"] > 0
