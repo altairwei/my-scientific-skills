@@ -16,12 +16,53 @@ pipes are duped off fd 0/1 so user subprocesses inheriting them can't corrupt
 the stream; real stdin/stdout → devnull. Errors are caught — the response
 ALWAYS returns (no hangs). Adapted from wisp-science's kernel_worker.py.
 """
-import builtins, io, json, os, shutil, subprocess, sys, traceback, uuid
+import builtins, io, json, os, resource, shutil, signal, subprocess, sys, time, traceback, uuid
 
 # Force Agg BEFORE matplotlib is ever imported (so plt.show()/GUI backends can't block).
 os.environ.setdefault("MPLBACKEND", "Agg")
 
 MAX_OUTPUT = 1024 * 1024  # 1 MB head cap on stdout/stderr
+
+
+class _CappedStringIO(io.StringIO):
+    """StringIO with a write-time UTF-8 byte cap. A runaway print/logging loop
+    otherwise grows the buffer unboundedly and can OOM the worker — the cap is
+    enforced at write() time, not after the fact. getvalue() appends a marker
+    reporting the REAL dropped count. Truncation never splits a UTF-8 sequence."""
+
+    BUFFER_CAP = MAX_OUTPUT - 256  # headroom so marker + content fit under MAX_OUTPUT
+
+    def __init__(self):
+        super().__init__()
+        self._buffered = 0
+        self._dropped = 0
+
+    def write(self, s):
+        if self._buffered >= self.BUFFER_CAP:
+            self._dropped += len(s.encode("utf-8", "surrogatepass"))
+            return len(s)
+        n = len(s.encode("utf-8", "surrogatepass"))
+        remaining = self.BUFFER_CAP - self._buffered
+        if n <= remaining:
+            self._buffered += n
+            return super().write(s)
+        # Trim on a UTF-8 boundary: encode, slice bytes, decode.
+        head = s.encode("utf-8", "surrogatepass")[:remaining].decode("utf-8", "ignore")
+        self._buffered = self.BUFFER_CAP
+        self._dropped = n - remaining
+        super().write(head)
+        return len(s)  # honour io.write contract (code points written-or-consumed)
+
+    def getvalue(self):
+        v = super().getvalue()
+        if self._dropped:
+            return v + (f"\n…(buffer capped at {self.BUFFER_CAP // 1024} KB; "
+                        f"{self._dropped} further bytes dropped)\n")
+        return v
+
+    @property
+    def truncated(self):
+        return self._dropped > 0
 
 _EXEC_PREFIXES = ("import ", "from ", "def ", "class ", "if ", "for ", "while ",
                   "with ", "try:", "try ", "except ", "finally:", "elif ", "else:",
@@ -229,7 +270,7 @@ def main():
         cell_tag = f"<repl:{counter}>"
         _lc.cache[cell_tag] = (len(code), None, code.splitlines(True), cell_tag)
 
-        out_cap, err_cap = io.StringIO(), io.StringIO()
+        out_cap, err_cap = _CappedStringIO(), _CappedStringIO()
         error = None
         old_out, old_err = sys.stdout, sys.stderr
         try:
@@ -244,7 +285,8 @@ def main():
 
         raw_stdout = out_cap.getvalue()
         raw_stderr = err_cap.getvalue()
-        stdout, truncated = _common.cap_output(raw_stdout)
+        stdout = raw_stdout
+        truncated = out_cap.truncated or err_cap.truncated
         degraded = not raw_stdout.strip() and bool(raw_stderr.strip())
         if degraded:
             stdout = _common.never_empty(stdout, raw_stderr)

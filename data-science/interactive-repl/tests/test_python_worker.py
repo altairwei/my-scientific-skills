@@ -172,6 +172,51 @@ def test_capture_new_figures_does_not_import_matplotlib(monkeypatch):
     assert "matplotlib.pyplot" not in sys.modules
 
 
+# ---- _CappedStringIO ---------------------------------------------------------
+
+def test_capped_stringio_caps_at_byte_boundary():
+    c = python_worker._CappedStringIO()
+    c.write("x" * (python_worker._CappedStringIO.BUFFER_CAP + 1000))
+    v = c.getvalue()
+    assert len(v.encode("utf-8", "surrogatepass")) <= python_worker.MAX_OUTPUT
+    assert "dropped" in v and "1000" in v
+    assert c.truncated is True
+
+
+def test_capped_stringio_utf8_boundary_trim():
+    c = python_worker._CappedStringIO()
+    big = "中" * (python_worker._CappedStringIO.BUFFER_CAP + 10)  # 3 bytes/char
+    c.write(big)
+    v = c.getvalue()
+    v.encode("utf-8")  # must not raise — no split surrogate pair
+    assert c.truncated is True
+
+
+def test_capped_stringio_write_contract_and_no_cap():
+    c = python_worker._CappedStringIO()
+    assert c.write("hello") == 5          # io contract: code points written-or-consumed
+    assert c.getvalue() == "hello"
+    assert c.truncated is False
+    # runaway loop style: repeated writes after the cap stay cheap, marker once
+    c.write("x" * 2000000)
+    assert c.truncated is True
+    c.write("y" * 2000000)                # still cheap, no exception
+    assert c.truncated is True
+
+
+def test_runaway_print_capped_in_worker():
+    p = _spawn()
+    try:
+        # tail-marker prints BEFORE the cap hits; the 5 MB write after it is capped
+        r = _call(p, "print('x' * 800000); print('tail-marker'); print('y' * 5000000)")
+        assert r["truncated"] is True
+        assert "tail-marker" in r["stdout"]
+        assert "dropped" in r["stdout"]
+        assert len(r["stdout"]) < 2 * 1024 * 1024    # bounded even though 5 MB printed
+    finally:
+        p.stdin.close(); p.terminate()
+
+
 def test_worker_uses_preinstalled_py_site(monkeypatch, tmp_path):
     """A py-site-<ver> pre-populated by scripts/setup.sh is on sys.path from
     the start — imports work without the lazy-install hook re-fetching."""
