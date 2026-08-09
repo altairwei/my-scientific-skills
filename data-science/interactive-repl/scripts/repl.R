@@ -29,6 +29,22 @@
 .repl$con_in <- file("stdin", "r")
 options(width = 400)  # wide so captured R lines don't wrap in the response
 
+# User code must never see the host's API keys — strip the same static list
+# the python worker uses (worker env only; the server's env is untouched).
+for (.k in c("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY",
+             "OPENROUTER_API_KEY", "GITHUB_TOKEN", "HF_TOKEN",
+             "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY")) {
+  if (nzchar(Sys.getenv(.k))) Sys.unsetenv(.k)
+}
+rm(.k)
+
+.repl$peak_rss_kb <- function() {
+  tryCatch({
+    hit <- grep("^VmHWM:", readLines("/proc/self/status"), value = TRUE)
+    if (length(hit)) as.integer(sub("^VmHWM:[[:space:]]*([0-9]+).*$", "\\1", hit[1])) else 0L
+  }, error = function(e) 0L)
+}
+
 .repl$plot_dir <- function() {
   d <- file.path(Sys.getenv("CLAUDE_PLUGIN_DATA", "/tmp/interactive-repl-data"), "plots")
   dir.create(d, recursive = TRUE, showWarnings = FALSE)
@@ -57,7 +73,9 @@ attach(list(dt_table = .repl$dt_table_impl), name = "interactive-repl:helpers",
 on.exit(detach("interactive-repl:helpers"), add = TRUE)
 
 .repl$run_cell <- function(code) {
-  out <- ""; plots <- character(0); warns <- character(0)
+  out <- ""; plots <- character(0); warns <- character(0); interrupted <- FALSE
+  error_call <- NULL
+  wall0 <- as.numeric(Sys.time()); cpu0 <- sum(proc.time()[1:2])
   stdout_con <- textConnection("out", "w", local = TRUE)
   sink(stdout_con, type = "output")
   error_msg <- tryCatch({
@@ -83,13 +101,31 @@ on.exit(detach("interactive-repl:helpers"), add = TRUE)
       }
     }
     NULL
-  }, error = function(e) conditionMessage(e))
+  }, interrupt = function(e) {
+    interrupted <<- TRUE
+    NULL
+  }, error = function(e) {
+    ec <- tryCatch(deparse(conditionCall(e)), error = function(e2) NULL)
+    if (!is.null(ec) && length(ec) > 0) error_call <<- paste(ec, collapse = " ")
+    conditionMessage(e)
+  })
   sink(); close(stdout_con)
   out_text <- paste(out, collapse = "\n")  # character(0) → "" (nzchar-safe)
+  if (interrupted && is.null(error_msg)) error_msg <- "interrupted"
   if (!nzchar(out_text) && !is.null(error_msg)) out_text <- paste0("ERROR: ", error_msg)
+  capped <- FALSE
+  if (nchar(out_text, type = "bytes") > 1024 * 1024) {
+    out_text <- paste0(substr(out_text, 1, 1024 * 1024),
+                       "\n...(output capped at 1 MB; further bytes dropped)\n")
+    capped <- TRUE
+  }
   list(stdout = out_text, stderr = paste(warns, collapse = "\n"),
-       error = error_msg, plots = as.list(plots),
-       truncated = FALSE, degraded = FALSE)
+       error = error_msg, interrupted = interrupted,
+       trace = if (is.null(error_call)) NULL else list(error_call = error_call),
+       usage = list(wall_s = round(as.numeric(Sys.time()) - wall0, 3),
+                    cpu_s = round(sum(proc.time()[1:2]) - cpu0, 3),
+                    peak_rss_kb = .repl$peak_rss_kb()),
+       plots = as.list(plots), truncated = capped, degraded = FALSE)
 }
 
 # Ready marker: job info from srun's env (read by the server over stdout).
@@ -103,6 +139,7 @@ on.exit(detach("interactive-repl:helpers"), add = TRUE)
 .repl$run_loop <- function() {
   repeat {
     line <- tryCatch(readLines(.repl$con_in, n = 1),
+                     interrupt = function(e) "",  # signal while idle: keep looping
                      error = function(e) character(0),
                      warning = function(w) character(0))
     if (length(line) == 0) break  # EOF / stdin closed
@@ -120,7 +157,9 @@ on.exit(detach("interactive-repl:helpers"), add = TRUE)
            plots = as.list(character(0)), truncated = FALSE, degraded = FALSE)
     })
     res$id <- rid
-    .repl$write_json(res)
+    # A SIGINT in the response-write window must not kill the loop — swallow
+    # it (the response may be lost; the server's read timeout covers that).
+    tryCatch(.repl$write_json(res), interrupt = function(e) NULL)
   }
 }
 .repl$run_loop()

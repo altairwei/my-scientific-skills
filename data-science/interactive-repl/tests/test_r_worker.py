@@ -1,4 +1,4 @@
-import json, os, subprocess, pathlib
+import json, os, signal, subprocess, pathlib, time
 
 HERE = pathlib.Path(__file__).parent
 REPL_R = HERE.parent / "scripts" / "repl.R"
@@ -85,6 +85,71 @@ def test_r_ggplot_saved_to_png(tmp_path, monkeypatch):
         assert r["error"] is None
         assert len(r["plots"]) >= 1
         assert os.path.exists(r["plots"][0])
+    finally:
+        p.stdin.close(); p.terminate()
+
+
+# ---- interrupt / attribution / usage / hygiene -------------------------------
+
+def test_r_sigint_interrupts_cell_keeps_worker(monkeypatch):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", "/tmp/x")
+    p = _spawn()
+    try:
+        p.stdin.write(json.dumps({"id": "t", "code": "Sys.sleep(30)"}) + "\n")
+        p.stdin.flush()
+        time.sleep(1.0)
+        p.send_signal(signal.SIGINT)
+        r = json.loads(p.stdout.readline())
+        assert r["interrupted"] is True
+        assert r["error"] == "interrupted"
+        r2 = _call(p, "1 + 1")
+        assert r2["error"] is None and "2" in r2["stdout"]
+        assert r2["interrupted"] is False
+    finally:
+        p.stdin.close(); p.terminate()
+
+
+def test_r_error_call_attribution():
+    p = _spawn()
+    try:
+        r = _call(p, "f <- function() stop('boom'); f()")
+        assert r["error"] is not None and "boom" in r["error"]
+        assert r["trace"]["error_call"] == "f()"
+    finally:
+        p.stdin.close(); p.terminate()
+
+
+def test_r_usage_fields():
+    p = _spawn()
+    try:
+        r = _call(p, "x <- sum(1:1000000)")
+        u = r["usage"]
+        assert u["wall_s"] >= 0 and u["cpu_s"] >= 0
+        assert u["peak_rss_kb"] > 0
+    finally:
+        p.stdin.close(); p.terminate()
+
+
+def test_r_secret_env_stripped(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-secret-123")
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", "/tmp/x")
+    p = _spawn()
+    try:
+        r = _call(p, "cat(nzchar(Sys.getenv('ANTHROPIC_API_KEY')), '|', "
+                      "Sys.getenv('CLAUDE_PLUGIN_DATA'))")
+        assert "FALSE" in r["stdout"] and "/tmp/x" in r["stdout"]
+    finally:
+        p.stdin.close(); p.terminate()
+
+
+def test_r_output_capped():
+    p = _spawn()
+    try:
+        # 5 MB in ONE cat — the response cap trims it, marker appended, TAIL lost
+        r = _call(p, "cat(paste(rep('x', 5000000), collapse='')); cat('TAIL\\n')")
+        assert r["truncated"] is True
+        assert "TAIL" not in r["stdout"]
+        assert "capped" in r["stdout"]
     finally:
         p.stdin.close(); p.terminate()
 
