@@ -496,7 +496,7 @@ def restart(session: str) -> Ack:
 @mcp.tool()
 def close(session: str) -> Ack:
     """Kill the named session's worker and release it — scancels the slurm
-    allocation, closes the transport, terminates the process. Unlike restart,
+    allocation, terminates the process. Unlike restart,
     the worker is NOT respawned: the next run_code on this name starts a
     fresh session with an empty namespace. Never creates a session — closing
     a name that isn't running is a no-op success. Sessions are never

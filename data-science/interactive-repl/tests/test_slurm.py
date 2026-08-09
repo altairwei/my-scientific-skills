@@ -143,7 +143,6 @@ async def test_slurm_python_end_to_end(monkeypatch, tmp_path):
     srun, worker connects back, session_info reports the SLURM job."""
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
     monkeypatch.setenv("INTERACTIVE_REPL_SLURM", "--partition=test -c 4")
-    monkeypatch.setenv("INTERACTIVE_REPL_HOST", "127.0.0.1")  # loopback in tests
     _install_shims(tmp_path, monkeypatch)
     from mcp import Client
     from repl_server import mcp
@@ -165,7 +164,6 @@ async def test_slurm_python_end_to_end(monkeypatch, tmp_path):
 async def test_slurm_python_restart_scancels(monkeypatch, tmp_path):
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
     monkeypatch.setenv("INTERACTIVE_REPL_SLURM", "-c 4")
-    monkeypatch.setenv("INTERACTIVE_REPL_HOST", "127.0.0.1")
     _install_shims(tmp_path, monkeypatch)
     from mcp import Client
     from repl_server import mcp
@@ -183,7 +181,6 @@ async def test_slurm_python_restart_scancels(monkeypatch, tmp_path):
 async def test_slurm_python_close_scancels(monkeypatch, tmp_path):
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
     monkeypatch.setenv("INTERACTIVE_REPL_SLURM", "-c 4")
-    monkeypatch.setenv("INTERACTIVE_REPL_HOST", "127.0.0.1")
     _install_shims(tmp_path, monkeypatch)
     from mcp import Client
     from repl_server import mcp
@@ -203,7 +200,6 @@ async def test_slurm_python_close_scancels(monkeypatch, tmp_path):
 async def test_slurm_r_end_to_end(monkeypatch, tmp_path):
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
     monkeypatch.setenv("INTERACTIVE_REPL_SLURM", "--partition=test -c 4")
-    monkeypatch.setenv("INTERACTIVE_REPL_HOST", "127.0.0.1")
     _install_shims(tmp_path, monkeypatch)
     from mcp import Client
     from repl_server import mcp
@@ -222,7 +218,6 @@ async def test_slurm_r_end_to_end(monkeypatch, tmp_path):
 async def test_slurm_r_restart_scancels(monkeypatch, tmp_path):
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
     monkeypatch.setenv("INTERACTIVE_REPL_SLURM", "-c 4")
-    monkeypatch.setenv("INTERACTIVE_REPL_HOST", "127.0.0.1")
     _install_shims(tmp_path, monkeypatch)
     from mcp import Client
     from repl_server import mcp

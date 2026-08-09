@@ -25,14 +25,16 @@ dt_table/plot capture):
 conda run -n <env> Rscript -e 'cat(rownames(installed.packages()), sep="\n")' | grep -E '^(jsonlite|knitr|ggplot2)$'
 ```
 
-Configure the server (persist in `~/.bashrc` so every Claude Code launch picks
-it up — the server reads these env vars at launch):
+Configure the server per-project — write into the project's
+`.claude/settings.local.json` `env` section (never `~/.bashrc` — conda envs
+are project-scoped; ask the user which env to use):
 
-```bash
-export INTERACTIVE_REPL_R_ENV=<env>      # conda env name
-# or
-export INTERACTIVE_REPL_R_BIN=/path/to/R # explicit binary
+```jsonc
+{ "env": { "INTERACTIVE_REPL_R_ENV": "<env>" } }   // or "INTERACTIVE_REPL_R_BIN"
 ```
+
+The server reads these env vars at launch, so restart Claude Code after
+changing them.
 
 If no env has R, create one (conda-forge has all three packages, no
 compilation):
@@ -48,8 +50,9 @@ right env via the env vars above.
 
 ## R + packages
 
-An `r:` session spawns `R --no-save --no-restore` running `scripts/repl.R`. It
-requires:
+An `r:` session spawns `R --quiet --no-echo --no-save --no-restore` running
+`scripts/repl.R` — the protocol is JSON-per-line over stdio (stdin/stdout
+pipes); warnings surface in the response's `stderr` field. It requires:
 
 - **R** on PATH (or set `INTERACTIVE_REPL_R_BIN` to the R binary path).
 - **jsonlite** (required — the worker's JSON protocol). Install:
@@ -70,8 +73,8 @@ install.packages(c("jsonlite", "knitr", "ggplot2"),
 ## Conda env
 
 If R lives in a conda env, set `INTERACTIVE_REPL_R_ENV` (the server wraps the launch in
-`conda run -n <env> --no-capture-output`). Set per-project via `.claude/settings.json`
-`env` or your shell env.
+`conda run -n <env> --no-capture-output`). Set per-project via `.claude/settings.local.json`
+`env`.
 
 ## Conventions
 

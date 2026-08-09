@@ -35,23 +35,31 @@ with a checklist of commands for the user to run.
 2. **Dependencies — run the skill's one-shot installer yourself**:
    `scripts/setup.sh` (idempotent, safe to re-run). It installs `uv` if
    missing and installs ALL python runtime deps (`mcp pydantic numpy pandas
-   matplotlib`) into the worker's `py-site` in a single `uv pip install
-   --target` — no mid-session lazy-install stalls, and once cached it works
-   offline. Report its output; fix anything it flags.
-3. **Environments — run the skill's discovery scanner** `scripts/discover.py`
-   (Positron-style multi-source: PATH, conda envs via `conda env list --json`
-   with `~/.conda/environments.txt` fallback, uv-managed pythons, system dirs
-   like `/opt/R`; it probes every candidate's version + the packages this
-   skill needs, marks broken ones but keeps scanning). Pick the best **READY**
-   candidate:
-   - **R**: configure with `INTERACTIVE_REPL_R_ENV` (conda env name) or
-     `INTERACTIVE_REPL_R_BIN` (path to R) — persist it yourself (append the
-     `export` to `~/.bashrc`) and tell the user to restart Claude Code, since
-     the server reads these at launch. If nothing is READY, use the create
-     command discover.py prints (`mamba create -n r-env -c conda-forge
-     r-base r-jsonlite r-knitr r-ggplot2`), then re-run discovery.
-   - **Python**: any usable python works — missing deps are installed by
-     `scripts/setup.sh` into `py-site` (never a blocker).
+   matplotlib`) into the worker's version-keyed `py-site-<ver>` in a single
+   `uv pip install --target` — no mid-session lazy-install stalls, and once
+   cached it works offline. Report its output; fix anything it flags.
+3. **Environments — ask the user, then write project-level config.** Run the
+   skill's discovery scanner `scripts/discover.py` (Positron-style multi-source:
+   PATH, conda envs via `conda env list --json` with `~/.conda/environments.txt`
+   fallback, uv-managed pythons, system dirs like `/opt/R`; it probes every
+   candidate's version + the packages this skill needs, marks broken ones but
+   keeps scanning). Then **ask the user** which env to use in THIS project —
+   conda envs are project-scoped, so never guess and never write global config:
+   - **R**: which conda env / R path? Configure with `INTERACTIVE_REPL_R_ENV`
+     (conda env name) or `INTERACTIVE_REPL_R_BIN` (path to R).
+   - **Python**: which conda env's python, or the server default (any usable
+     python works — missing deps are installed by `scripts/setup.sh` into the
+     versioned `py-site-<ver>`, never a blocker)? Configure with
+     `INTERACTIVE_REPL_PY_BIN` (env's python path) if a specific env was chosen.
+   - Write the choice into the **project-level** `.claude/settings.local.json`
+     `env` section — never `~/.bashrc` (that pollutes every other project):
+     `{"env": {"INTERACTIVE_REPL_R_ENV": "r-env"}}`. Ask whether the user also
+     wants a user-level copy; default is project-level only.
+   - If nothing is READY: use the create command discover.py prints (`mamba
+     create -n r-env -c conda-forge r-base r-jsonlite r-knitr r-ggplot2`),
+     then re-run discovery.
+   - Tell the user to restart Claude Code — the server reads these env vars at
+     launch.
 4. **Plugin state** — inspect `~/.claude/plugins/…` on disk: marketplace entry
    present? plugin enabled? If the plugin itself is missing, ask the user to
    run `/plugin install data-science@my-scientific-skills` (slash commands are
@@ -103,8 +111,8 @@ languages side by side; just use distinct prefixes.
 - `inject(session, path)` — exec a `kernel.py`/`kernel.R` sidecar into the namespace. Call once when another skill ships a sidecar.
 - `restart(session)` — wipe + respawn the worker. **Rarely** — only after a crash or to deliberately reset (loses DB connections + loaded data).
 - `close(session)` — kill the session's worker and release it (scancels the slurm allocation). Sessions are **not** auto-closed — call `close` when the task is done; the next `run_code` on the same name starts a fresh worker.
-- `session_info(session)` — running state, pid, plot dir, and (slurm mode) compute-node job id / node / transport.
-- `worker_mode(mode?, slurm_flags?, transport?)` — probe or switch how workers launch: `local` (default) vs `slurm` (srun on a compute node). Call it with no args to detect the environment; switch for HPC work. See `references/slurm-hpc.md`.
+- `session_info(session)` — running state, pid, plot dir, and (slurm mode) compute-node job id / node.
+- `worker_mode(mode?, slurm_flags?)` — probe or switch how workers launch: `local` (default) vs `slurm` (salloc+srun on a compute node). Call it with no args to detect the environment; switch for HPC work. See `references/slurm-hpc.md`.
 
 ## Plots — save and look (necessary, not sufficient)
 
@@ -145,7 +153,7 @@ next `run_code` on a closed name starts a fresh worker with an empty namespace.
 
 On supercomputing clusters, heavy compute must run on a compute node, not the
 login node. `worker_mode()` on the server probes the environment
-(`srun_available`, `already_in_allocation`, `ssh_available`) and switches
+(`srun_available`, `already_in_allocation`) and switches
 between `local` and `slurm` launch — call it before heavy work when the user
 mentions clusters/queues/partitions. Slurm sessions are tied to the
 allocation: expiry surfaces as `worker died` → `restart` resubmits (fresh

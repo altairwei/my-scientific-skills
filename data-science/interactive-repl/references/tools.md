@@ -68,8 +68,8 @@ error or to deliberately reset. **Loses DB connections and loaded data** — use
 { "ok": true, "message": "closed session 'r:lmp'" }
 ```
 
-Kill the named session's worker and release it — closes the transport, terminates the
-process, and (slurm mode) scancels the allocation. Unlike `restart`, the worker is NOT
+Kill the named session's worker and release it — terminates the process and
+(slurm mode) scancels the allocation. Unlike `restart`, the worker is NOT
 respawned; the next `run_code` on this name starts a fresh, empty session. Never creates
 a session: closing a name that isn't running is a no-op success
 (`{ "ok": true, "message": "no running session 'r:ghost'" }`). Sessions are not
