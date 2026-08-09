@@ -119,6 +119,7 @@ languages side by side; just use distinct prefixes.
 - `inject(session, path)` — exec a `kernel.py`/`kernel.R` sidecar into the namespace. Call once when another skill ships a sidecar.
 - `restart(session)` — wipe + respawn the worker. **Rarely** — only after a crash or to deliberately reset (loses DB connections + loaded data).
 - `close(session)` — kill the session's worker and release it (scancels the slurm allocation). Sessions are **not** auto-closed — call `close` when the task is done; the next `run_code` on the same name starts a fresh worker.
+- `interrupt(session)` — cancel the running cell; the worker and its state survive (`interrupted=true` in the result). Local: SIGINT; slurm: scancel `--signal=INT`. Use it when a cell runs long or seems stuck — check the partial output, then continue or `restart` only if the worker is unresponsive.
 - `session_info(session)` — running state, pid, plot dir, and (slurm mode) compute-node job id / node.
 - `worker_mode(mode?, slurm_flags?)` — probe or switch how workers launch: `local` (default) vs `slurm` (salloc+srun on a compute node). Call it with no args to detect the environment; switch for HPC work. See `references/slurm-hpc.md`.
 
@@ -151,6 +152,13 @@ once its task is done — abandoned workers (and slurm allocations) stay alive u
 After a crash (`run_code` returns "worker died") → `restart(session)`, or to deliberately
 reset. **Do not restart between chunks "to be safe"** — restart-cycles lose DB
 connections and loaded data.
+
+**Stuck cell? Interrupt first.** A cell that runs long or hangs is NOT a crash —
+call `interrupt(session)` to cancel it (partial output, state intact), then
+continue. `restart` is only for an unresponsive worker ("cell unresponsive
+after interrupt" — the cell ignored SIGINT) or a deliberate reset. `run_code`
+now enforces its `timeout` by interrupting the cell once before reporting
+unresponsive.
 
 When the task is over (or you're moving to another project) → `close(session)`: kills
 the worker and releases it — frees the process and, in slurm mode, the allocation.

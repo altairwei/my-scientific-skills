@@ -62,6 +62,10 @@ server restarts.
   allocation for the work.
 - **`restart` / `close`** scancel the old job (job id from the worker's ready
   handshake) and kill the salloc process.
+- **`interrupt`** sends `scancel --signal=INT <job_id>` — the cell on the
+  compute node is cancelled, the allocation and namespace survive. (Local
+  SIGINT to the salloc chain is unreliable — the job id from the ready
+  handshake is the robust path.)
 - **`session_info`** reports `job_id` / `node` — tell the user where the
   session runs ("on cn042, job 74213").
 - **Switching modes** only affects new sessions; existing sessions keep

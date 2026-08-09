@@ -75,6 +75,23 @@ a session: closing a name that isn't running is a no-op success
 (`{ "ok": true, "message": "no running session 'r:ghost'" }`). Sessions are not
 auto-closed — call `close` when the task is done.
 
+## interrupt(session) → InterruptAck
+
+Cancel the cell currently running in the session. The worker and its namespace
+survive — the in-flight `run_code` returns with `interrupted: true` and any
+partial output. Local sessions: SIGINT to the worker; slurm sessions:
+`scancel --signal=INT <job_id>`. Returns `{ok, interrupted, message}`.
+
+- Rejected with `ok=false` when no cell is running — the server never signals
+  an idle worker (the R worker cannot survive a signal delivered while idle).
+- A cell that ignores SIGINT (e.g. `signal.SIG_IGN` or C-level work) surfaces
+  as "cell unresponsive after interrupt" after a grace period — `restart`
+  then.
+- `run_code`'s `timeout` (default 300 s) is now enforced: on expiry the server
+  auto-interrupts once, waits a grace period, then reports unresponsive.
+- A second `run_code` on a session with a cell in flight returns "session
+  busy" — wait or interrupt instead of piling on.
+
 ## session_info(session) → SessionInfo
 
 ```jsonc

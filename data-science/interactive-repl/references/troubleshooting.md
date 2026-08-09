@@ -7,12 +7,16 @@ server survives — call `restart(session)` and continue. Stdio MCP servers are 
 auto-restarted by Claude Code, but the *worker* (subprocess) is restartable; the server
 process itself rarely crashes because all user code runs in the worker.
 
-## Long-running code
+## Long-running code / stuck cells
 
-`run_code` has its own `timeout` (default 300s, advisory in v1) — Claude Code's Bash
-timeout does **not** apply to MCP tool calls. Very long jobs (training, big joins) are
-not what the REPL is for — use one-shot scripts / `pipeline-maker`. If you must run a
-long cell, chunk it so each `run_code` returns within reason.
+`run_code` has a real `timeout` (default 300s): on expiry the server
+interrupts the cell once — the worker survives, the result returns with
+`interrupted: true` and partial stdout. If the cell ignores SIGINT you get
+"cell unresponsive after interrupt" → then `restart`. Claude Code's Bash
+timeout does **not** apply to MCP tool calls. Very long jobs (training, big
+joins) are not what the REPL is for — use one-shot scripts /
+`pipeline-maker`. If a cell runs away, call `interrupt(session)` yourself
+instead of waiting for the timeout.
 
 ## `browser()` / `readline()` / `scan()` blocks
 
