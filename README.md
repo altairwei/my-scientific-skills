@@ -25,6 +25,14 @@ Skills for data analysis, statistics, and visualization.
 | [exploratory-data-analysis](data-science/exploratory-data-analysis/) | Guides Claude through a structured exploratory data analysis of a tabular dataset |
 | [interactive-repl](data-science/interactive-repl/) | Persistent R/Python REPL via one MCP server (`repl`) with per-session language prefixes (`r:` / `py:`) — iterate in-session instead of re-running scripts; auto plot capture, variable inspection, sidecar injection; HPC/Slurm compute-node sessions |
 
+### biomedical-data
+
+Cross-cutting public biomedical data MCP layer — one server (`bio-data`) with 14 tools across NCBI E-utilities (PubMed), ClinVar, dbSNP, GWAS Catalog, Open Targets, gnomAD, MyGene, Ensembl/BioMart. Consumed by `bioinformatics` and `scientific-writing` skills; zero-setup via `uv run` inline deps.
+
+| Skill | Description |
+|-------|-------------|
+| [bio-data](biomedical-data/bio-data/) | One MCP server exposing 14 public biomedical-data tools (PubMed search/fetch, ClinVar, dbSNP, GWAS Catalog, Open Targets, gnomAD, MyGene, Ensembl/BioMart); zero-setup via `uv run` inline deps; graceful degradation when the server isn't loaded |
+
 ### computing-infrastructure
 
 Skills for compute environment setup and infrastructure workflows.
@@ -47,10 +55,13 @@ Skills for scientific writing, literature work, and publishing workflows.
 /plugin marketplace add <your-github-user>/my-scientific-skills
 /plugin install bioinformatics@my-scientific-skills
 /plugin install data-science@my-scientific-skills
+/plugin install biomedical-data@my-scientific-skills
 /plugin install computing-infrastructure@my-scientific-skills
 ```
 
 Each category directory is a plugin; install only the categories you need.
+
+> **`biomedical-data` plugin also needs `uv`:** its `bio-data` MCP server launches via `uv run` (same mechanism as `repl` above). If `uv` isn't installed, see the steps under `data-science`.
 
 > **`data-science` plugin prerequisite — `uv`:** the `interactive-repl` skill bundles one
 > MCP server (`repl`) that launches via [`uv`](https://docs.astral.sh/uv/).

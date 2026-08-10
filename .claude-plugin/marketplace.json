@@ -53,6 +53,21 @@
       "skills": [
         "./computing-infrastructure/compute-env-setup"
       ]
+    },
+    {
+      "name": "biomedical-data",
+      "description": "Cross-cutting public biomedical data MCP layer — NCBI, ClinVar, dbSNP, GWAS Catalog, Open Targets, gnomAD, MyGene, Ensembl. Consumed by bioinformatics and scientific-writing skills.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./biomedical-data/bio-data"
+      ],
+      "mcpServers": {
+        "bio-data": {
+          "command": "uv",
+          "args": ["run", "${CLAUDE_PLUGIN_ROOT}/biomedical-data/bio-data/scripts/server.py"]
+        }
+      }
     }
   ]
 }
