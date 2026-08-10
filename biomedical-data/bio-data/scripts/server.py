@@ -18,14 +18,35 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import _common  # noqa: E402
-# api modules are imported incrementally as their tools are wired (Tasks 6-13):
-#   from apis import pubmed, mygene, clinvar, dbsnp, gwas_catalog, opentargets, gnomad, ensembl
+from apis import pubmed  # noqa: E402  (imported incrementally as modules land)
 
 from mcp.server import MCPServer  # noqa: E402
 
 mcp = MCPServer("bio-data")
 
-# Tools are registered in later tasks via @mcp.tool() wrappers defined below.
+
+@mcp.tool()
+def search_pubmed(query: str, retmax: int = 20) -> dict:
+    """Search PubMed by query term; return matching PMIDs and the total count."""
+    return pubmed.search_pubmed(query, retmax)
+
+
+@mcp.tool()
+def fetch_pubmed(pmids: list[str]) -> dict:
+    """Fetch summary metadata (title, authors, journal) for a list of PMIDs."""
+    return {"articles": pubmed.fetch_pubmed(pmids)}
+
+
+@mcp.tool()
+def find_related_articles(pmid: str) -> dict:
+    """Find PubMed articles related to a given PMID (NCBI ELink)."""
+    return pubmed.find_related_articles(pmid)
+
+
+@mcp.tool()
+def fetch_pmc_fulltext(pmc_ids: list[str]) -> dict:
+    """Fetch full-text XML for PMC IDs (Europe PMC). Missing full text → null."""
+    return pubmed.fetch_pmc_fulltext(pmc_ids)
 
 
 def main() -> None:
