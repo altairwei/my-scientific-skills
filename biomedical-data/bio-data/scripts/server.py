@@ -19,6 +19,7 @@ sys.path.insert(0, str(HERE))
 
 import _common  # noqa: E402
 from apis import pubmed  # noqa: E402  (imported incrementally as modules land)
+from apis import mygene  # noqa: E402
 
 from mcp.server import MCPServer  # noqa: E402
 
@@ -47,6 +48,12 @@ def find_related_articles(pmid: str) -> dict:
 def fetch_pmc_fulltext(pmc_ids: list[str]) -> dict:
     """Fetch full-text XML for PMC IDs (Europe PMC). Missing full text → null."""
     return pubmed.fetch_pmc_fulltext(pmc_ids)
+
+
+@mcp.tool()
+def query_genes(query: str, size: int = 10) -> dict:
+    """Query MyGene.info by a Lucene-style query (e.g. symbol:BRCA1); return gene hits."""
+    return mygene.query_genes(query, size=size)
 
 
 def main() -> None:
