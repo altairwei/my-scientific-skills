@@ -25,6 +25,7 @@ from apis import dbsnp  # noqa: E402
 from apis import gwas_catalog  # noqa: E402
 from apis import opentargets  # noqa: E402
 from apis import gnomad  # noqa: E402
+from apis import ensembl  # noqa: E402
 
 from mcp.server import MCPServer  # noqa: E402
 
@@ -101,6 +102,19 @@ def target_associations(ensembl_id: str) -> dict:
 def gnomad_variant_frequency(variant: str) -> dict:
     """Fetch gnomAD allele frequencies for a variant (form: chrom-pos-ref-alt, GRCh38, e.g. 1-55051526-G-A)."""
     return gnomad.gnomad_variant_frequency(variant)
+
+
+@mcp.tool()
+def query_ensembl(path: str, params: str = "") -> dict:
+    """Query Ensembl REST by path (e.g. 'lookup/symbol/human/BRCA1') + optional 'key=value&...' params. Returns JSON."""
+    parsed = dict(p.split("=", 1) for p in params.split("&") if "=" in p) if params else None
+    return ensembl.query_ensembl(path, params=parsed)
+
+
+@mcp.tool()
+def query_biomart(xml_query: str) -> dict:
+    """Run a BioMart XML query (POST to /biomart/martservice); returns TSV text. Build XML via the BioMart web UI."""
+    return {"tsv": ensembl.query_biomart(xml_query)}
 
 
 def main() -> None:
