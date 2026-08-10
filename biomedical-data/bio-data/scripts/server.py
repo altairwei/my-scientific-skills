@@ -22,6 +22,7 @@ from apis import pubmed  # noqa: E402  (imported incrementally as modules land)
 from apis import mygene  # noqa: E402
 from apis import clinvar  # noqa: E402
 from apis import dbsnp  # noqa: E402
+from apis import gwas_catalog  # noqa: E402
 
 from mcp.server import MCPServer  # noqa: E402
 
@@ -74,6 +75,12 @@ def search_dbsnp_region(chrom: str, start: int, stop: int, assembly: str = "GRCh
 def dbsnp_get_rsids(rsids: list[str]) -> dict:
     """Fetch full dbSNP records for a batch of rsIDs (e.g. ['rs123','rs456'])."""
     return dbsnp.dbsnp_get_rsids(rsids)
+
+
+@mcp.tool()
+def search_gwas_catalog(query: str, size: int = 20) -> dict:
+    """Search GWAS Catalog associations by trait / gene / region query."""
+    return gwas_catalog.search_gwas_catalog(query, size)
 
 
 def main() -> None:
