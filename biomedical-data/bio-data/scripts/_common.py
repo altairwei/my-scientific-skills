@@ -65,3 +65,67 @@ class Retry:
         if isinstance(last, Exception):
             raise last
         return last
+
+
+class HttpClient:
+    """Thin httpx wrapper: per-API base, UA + contact-email headers, rate
+    limiting, retry, and optional on-disk JSON cache. `transport` is injectable
+    for tests (httpx.MockTransport)."""
+
+    def __init__(self, base_url, *, ua="bio-data-mcp/0.1", contact_email=None,
+                 rate=3.0, api_key=None, transport=None, timeout=30.0,
+                 cache_dir=None, cache_ttl=300):
+        headers = {"User-Agent": ua}
+        if contact_email:
+            headers["Contact-Email"] = contact_email
+        self._client = httpx.Client(base_url=base_url, timeout=timeout,
+                                    transport=transport, headers=headers)
+        self._limiter = RateLimiter(rate)
+        self._retry = Retry()
+        self._api_key = api_key
+        self._cache_dir = Path(cache_dir) if cache_dir else None
+        self._cache_ttl = cache_ttl
+
+    def _cache_key(self, path, params):
+        import hashlib
+        key = f"{path}?{sorted((params or {}).items())}"
+        return hashlib.md5(key.encode()).hexdigest()
+
+    def _cache_read(self, key):
+        if not self._cache_dir:
+            return None
+        p = self._cache_dir / f"{key}.json"
+        if not p.exists():
+            return None
+        age = time.time() - p.stat().st_mtime
+        if age > self._cache_ttl:
+            return None
+        return json.loads(p.read_text())
+
+    def _cache_write(self, key, data):
+        if not self._cache_dir:
+            return
+        self._cache_dir.mkdir(parents=True, exist_ok=True)
+        (self._cache_dir / f"{key}.json").write_text(json.dumps(data))
+
+    def get(self, path, params=None):
+        p = dict(params or {})
+        if self._api_key:
+            p.setdefault("api_key", self._api_key)
+        key = self._cache_key(path, p)
+        cached = self._cache_read(key)
+        if cached is not None:
+            return cached
+        self._limiter.acquire()
+        r = self._retry.call(lambda: self._client.get(path, params=p))
+        r.raise_for_status()
+        data = r.json()
+        self._cache_write(key, data)
+        return data
+
+    def post(self, path, *, content=None, data=None, headers=None):
+        # No cache for POST (GraphQL / BioMart). Still rate-limited + retried.
+        self._limiter.acquire()
+        r = self._retry.call(lambda: self._client.post(path, content=content, data=data, headers=headers))
+        r.raise_for_status()
+        return r.json()
