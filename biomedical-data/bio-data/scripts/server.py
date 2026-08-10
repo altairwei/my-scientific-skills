@@ -21,6 +21,7 @@ import _common  # noqa: E402
 from apis import pubmed  # noqa: E402  (imported incrementally as modules land)
 from apis import mygene  # noqa: E402
 from apis import clinvar  # noqa: E402
+from apis import dbsnp  # noqa: E402
 
 from mcp.server import MCPServer  # noqa: E402
 
@@ -61,6 +62,18 @@ def query_genes(query: str, size: int = 10) -> dict:
 def fetch_clinvar_variant(accession: str) -> dict:
     """Fetch ClinVar clinical interpretation for a variant accession (e.g. VCV000045595)."""
     return clinvar.fetch_clinvar_variant(accession)
+
+
+@mcp.tool()
+def search_dbsnp_region(chrom: str, start: int, stop: int, assembly: str = "GRCh38", max_rsids: int = 200) -> dict:
+    """List dbSNP rsIDs in a genomic region (GRCh38/GRCh37). Keep windows small; dense regions hold many rsIDs/kb."""
+    return dbsnp.search_dbsnp_region(chrom, start, stop, assembly, max_rsids)
+
+
+@mcp.tool()
+def dbsnp_get_rsids(rsids: list[str]) -> dict:
+    """Fetch full dbSNP records for a batch of rsIDs (e.g. ['rs123','rs456'])."""
+    return dbsnp.dbsnp_get_rsids(rsids)
 
 
 def main() -> None:
