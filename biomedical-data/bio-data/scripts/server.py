@@ -23,6 +23,7 @@ from apis import mygene  # noqa: E402
 from apis import clinvar  # noqa: E402
 from apis import dbsnp  # noqa: E402
 from apis import gwas_catalog  # noqa: E402
+from apis import opentargets  # noqa: E402
 
 from mcp.server import MCPServer  # noqa: E402
 
@@ -81,6 +82,18 @@ def dbsnp_get_rsids(rsids: list[str]) -> dict:
 def search_gwas_catalog(query: str, size: int = 20) -> dict:
     """Search GWAS Catalog associations by trait / gene / region query."""
     return gwas_catalog.search_gwas_catalog(query, size)
+
+
+@mcp.tool()
+def search_targets(query: str) -> dict:
+    """Search Open Targets by gene symbol (returns Ensembl IDs + names)."""
+    return opentargets.search_targets(query)
+
+
+@mcp.tool()
+def target_associations(ensembl_id: str) -> dict:
+    """Fetch Open Targets genetic-evidence associations for an Ensembl gene ID."""
+    return opentargets.target_associations(ensembl_id)
 
 
 def main() -> None:
