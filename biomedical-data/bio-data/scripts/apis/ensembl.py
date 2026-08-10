@@ -17,9 +17,12 @@ def _polite_ua() -> str:
 
 
 def _client(transport=None) -> _common.HttpClient:
+    # Ensembl REST returns YAML unless the request carries Content-Type:
+    # application/json — the single most common integration gotcha.
     return _common.HttpClient(REST_BASE, ua=_polite_ua(), rate=15.0,
                               transport=transport,
-                              cache_dir=_common.cache_dir())
+                              cache_dir=_common.cache_dir(),
+                              headers={"Content-Type": "application/json"})
 
 
 def _mart_client(transport=None) -> _common.HttpClient:

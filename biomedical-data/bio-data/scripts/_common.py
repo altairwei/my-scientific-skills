@@ -74,8 +74,9 @@ class HttpClient:
 
     def __init__(self, base_url, *, ua="bio-data-mcp/0.1", contact_email=None,
                  rate=3.0, api_key=None, transport=None, timeout=30.0,
-                 cache_dir=None, cache_ttl=300):
-        headers = {"User-Agent": ua}
+                 cache_dir=None, cache_ttl=300, headers=None):
+        headers = dict(headers or {})
+        headers.setdefault("User-Agent", ua)
         if contact_email:
             headers["Contact-Email"] = contact_email
         self._client = httpx.Client(base_url=base_url, timeout=timeout,

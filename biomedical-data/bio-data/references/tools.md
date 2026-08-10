@@ -38,11 +38,12 @@ Europe PMC full-text XML for PMC IDs.
 
 ## `fetch_clinvar_variant(accession)`
 
-ClinVar clinical interpretation via NCBI E-utilities (db=clinvar).
+ClinVar clinical interpretation via NCBI E-utilities (db=clinvar). The VCV
+prefix is stripped internally — esummary takes the bare numeric variation ID.
 
-- **Params:** `accession` (str, e.g. `VCV000045595`).
-- **Returns:** `{"accession", "found": bool, "title", "clinical_significance", "uid"}` — `found: false` when the accession has no record.
-- **Example:** `fetch_clinvar_variant(accession="VCV000045595")` → `{"accession": "VCV000045595", "found": true, "title": "NM_007294.4(BRCA1):c.5266dup", "clinical_significance": "Pathogenic", "uid": "672"}`
+- **Params:** `accession` (str, e.g. `VCV000045595` or `45595`).
+- **Returns:** `{"accession", "found": bool, "title", "germline_classification", "uid"}` — `germline_classification` is ClinVar's current field (values like `Pathogenic`); `found: false` when the accession has no record.
+- **Example:** `fetch_clinvar_variant(accession="VCV000045595")` → `{"accession": "VCV000045595", "found": true, "title": "NM_014000.3(VCL):c.2388G>A (p.Pro796=)", "germline_classification": "Pathogenic", "uid": "45595"}`
 
 ## `search_dbsnp_region(chrom, start, stop, assembly, max_rsids=200)`
 
@@ -86,11 +87,11 @@ Open Targets genetic-evidence associations for a target (GraphQL).
 
 ## `gnomad_variant_frequency(variant)`
 
-gnomAD allele frequencies (public browser API).
+gnomAD allele frequencies (public GraphQL API, `gnomad_r4` dataset / GRCh38).
 
-- **Params:** `variant` (str, `chrom-pos-ref-alt` on **GRCh38**, e.g. `1-55051526-G-A`).
-- **Returns:** `{"variant", "genome": {ac, an, ac_hom, ...}, "exome": {...}}` — per-dataset allele counts/frequencies; empty dicts when the variant isn't found.
-- **Example:** `gnomad_variant_frequency(variant="1-55051526-G-A")`
+- **Params:** `variant` (str, `chrom-pos-ref-alt` on **GRCh38**, e.g. `7-117559593-ATCT-A`).
+- **Returns:** `{"variant", "genome": {ac, an, af}, "exome": {...}}` — per-dataset allele counts/frequencies; empty dicts when the variant isn't found.
+- **Example:** `gnomad_variant_frequency(variant="7-117559593-ATCT-A")`
 
 ## `query_genes(query, size=10)`
 

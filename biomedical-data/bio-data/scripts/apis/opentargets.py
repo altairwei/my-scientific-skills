@@ -1,5 +1,5 @@
 # biomedical-data/bio-data/scripts/apis/opentargets.py
-"""Open Targets Platform tools (GraphQL over POST)."""
+"""Open Targets Platform tools (GraphQL over POST, API v4)."""
 from __future__ import annotations
 
 import json
@@ -7,17 +7,20 @@ from typing import Optional
 
 import _common
 
-BASE = "https://api.platform.opentargets.org/api"
+BASE = "https://api.platform.opentargets.org/api/v4"
 
 _SEARCH_Q = """
 query($q: String!) {
-  search(query: $q, entity: "target") { hits { id name } total }
+  search(queryString: $q, entityNames: ["target"]) {
+    hits { id object { ... on Target { id approvedSymbol } } }
+    total
+  }
 }
 """
 _ASSOC_Q = """
 query($ensemblId: String!) {
-  associations(ensemblId: $ensemblId) {
-    rows { score disease { id name } }
+  target(ensemblId: $ensemblId) {
+    associatedDiseases { rows { score disease { id name } } }
   }
 }
 """
@@ -37,11 +40,15 @@ def search_targets(query: str, client: Optional[_common.HttpClient] = None):
     c = client or _client()
     data = _gql(c, _SEARCH_Q, {"q": query})
     search = data.get("data", {}).get("search", {})
-    return {"hits": search.get("hits", []), "total": search.get("total", 0)}
+    hits = [
+        {"id": h.get("id"), "name": (h.get("object") or {}).get("approvedSymbol")}
+        for h in search.get("hits", [])
+    ]
+    return {"hits": hits, "total": search.get("total", 0)}
 
 
 def target_associations(ensembl_id: str, client: Optional[_common.HttpClient] = None):
     c = client or _client()
     data = _gql(c, _ASSOC_Q, {"ensemblId": ensembl_id})
-    assoc = data.get("data", {}).get("associations", {})
+    assoc = data.get("data", {}).get("target", {}).get("associatedDiseases", {})
     return {"rows": assoc.get("rows", [])}

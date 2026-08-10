@@ -91,6 +91,17 @@ def test_http_client_raises_on_4xx_after_retry(monkeypatch):
         pass
 
 
+def test_http_client_extra_headers_sent():
+    seen = {}
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["ct"] = request.headers.get("Content-Type")
+        return _mock(200, payload={})
+    c = HttpClient("https://x", transport=httpx.MockTransport(handler),
+                   headers={"Content-Type": "application/json"})
+    c.get("foo")
+    assert seen["ct"] == "application/json"
+
+
 def test_cache_dir_none_when_env_unset(monkeypatch):
     monkeypatch.delenv("CLAUDE_PLUGIN_DATA", raising=False)
     from _common import cache_dir

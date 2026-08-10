@@ -24,7 +24,7 @@ def test_search_dbsnp_region_builds_range_term():
 
 def test_dbsnp_get_rsids_returns_records():
     def handler(request):
-        assert request.url.params["id"] == "rs1,rs2"
+        assert request.url.params["id"] == "1,2"  # rs prefix stripped; db=snp wants bare IDs
         return _mock({"result": {"uids": ["1", "2"], "1": {"snp_class": "snv", "CHRPOS": "1:12345"}, "2": {"snp_class": "snv", "CHRPOS": "1:67890"}}})
     data = dbsnp.dbsnp_get_rsids(["rs1", "rs2"], client=_client(handler))
     assert len(data["records"]) == 2

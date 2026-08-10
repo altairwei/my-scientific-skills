@@ -33,7 +33,9 @@ def search_dbsnp_region(chrom: str, start: int, stop: int, assembly: str = "GRCh
 
 def dbsnp_get_rsids(rsids: list[str], client: Optional[_common.HttpClient] = None):
     c = client or _client()
-    ids = ",".join(rsids)  # keep the rs prefix — NCBI db=snp accepts "rs1,rs2"
+    # db=snp esummary wants bare numeric IDs (live-verified: id=rs1800722
+    # returns [], id=1800722 returns the record) — strip the rs prefix.
+    ids = ",".join(r[2:] if r.startswith("rs") else r for r in rsids)
     data = c.get("entrez/eutils/esummary.fcgi", {
         "db": "snp", "id": ids, "retmode": "json", "tool": _TOOL,
     })

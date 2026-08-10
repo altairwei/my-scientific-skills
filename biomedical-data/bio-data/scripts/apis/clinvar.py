@@ -21,8 +21,12 @@ def _client(transport=None) -> _common.HttpClient:
 
 def fetch_clinvar_variant(accession: str, client: Optional[_common.HttpClient] = None):
     c = client or _client()
+    # esummary db=clinvar takes the bare numeric variation ID, not the VCV
+    # accession (VCV000045595 -> 45595). Normalize: keep digits, drop zeros.
+    digits = "".join(ch for ch in accession if ch.isdigit())
+    vid = str(int(digits)) if digits else accession
     data = c.get("entrez/eutils/esummary.fcgi", {
-        "db": "clinvar", "id": accession, "retmode": "json", "tool": _TOOL,
+        "db": "clinvar", "id": vid, "retmode": "json", "tool": _TOOL,
     })
     result = data.get("result", {})
     uids = result.get("uids", [])
@@ -33,6 +37,6 @@ def fetch_clinvar_variant(accession: str, client: Optional[_common.HttpClient] =
         "accession": accession,
         "found": True,
         "title": entry.get("title"),
-        "clinical_significance": entry.get("clinical_significance"),
+        "germline_classification": entry.get("germline_classification"),
         "uid": uids[0],
     }

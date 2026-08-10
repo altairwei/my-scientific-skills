@@ -33,6 +33,6 @@ zero-setup (mirrors the in-house `data-science/interactive-repl` server).
 
 NCBI E-utilities, Europe PMC, ClinVar (via E-utilities db=clinvar), dbSNP (via
 db=snp), GWAS Catalog (EMBL-EBI REST), Open Targets Platform (GraphQL),
-gnomAD (public browser API), MyGene.info, Ensembl REST + BioMart. Usage
+gnomAD (public GraphQL API), MyGene.info, Ensembl REST + BioMart. Usage
 policies apply per provider; users set `NCBI_API_KEY` / `NCBI_CONTACT_EMAIL`
 optionally.
