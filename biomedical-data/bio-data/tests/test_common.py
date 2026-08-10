@@ -89,3 +89,15 @@ def test_http_client_raises_on_4xx_after_retry(monkeypatch):
         assert False, "expected raise"
     except httpx.HTTPStatusError:
         pass
+
+
+def test_cache_dir_none_when_env_unset(monkeypatch):
+    monkeypatch.delenv("CLAUDE_PLUGIN_DATA", raising=False)
+    from _common import cache_dir
+    assert cache_dir() is None
+
+
+def test_cache_dir_path_when_env_set(monkeypatch):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", "/tmp/x")
+    from _common import cache_dir
+    assert cache_dir() == "/tmp/x/cache"

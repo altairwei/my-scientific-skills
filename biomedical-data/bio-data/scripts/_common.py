@@ -129,3 +129,13 @@ class HttpClient:
         r = self._retry.call(lambda: self._client.post(path, content=content, data=data, headers=headers))
         r.raise_for_status()
         return r.json()
+
+
+def cache_dir() -> Optional[str]:
+    """Resolve the on-disk cache dir from CLAUDE_PLUGIN_DATA, or None when unset.
+
+    Returns None (no caching) if CLAUDE_PLUGIN_DATA isn't set — so tests and
+    off-plugin use never try to write to a bogus path.
+    """
+    d = os.environ.get("CLAUDE_PLUGIN_DATA")
+    return f"{d}/cache" if d else None
