@@ -24,6 +24,7 @@ from apis import clinvar  # noqa: E402
 from apis import dbsnp  # noqa: E402
 from apis import gwas_catalog  # noqa: E402
 from apis import opentargets  # noqa: E402
+from apis import gnomad  # noqa: E402
 
 from mcp.server import MCPServer  # noqa: E402
 
@@ -94,6 +95,12 @@ def search_targets(query: str) -> dict:
 def target_associations(ensembl_id: str) -> dict:
     """Fetch Open Targets genetic-evidence associations for an Ensembl gene ID."""
     return opentargets.target_associations(ensembl_id)
+
+
+@mcp.tool()
+def gnomad_variant_frequency(variant: str) -> dict:
+    """Fetch gnomAD allele frequencies for a variant (form: chrom-pos-ref-alt, GRCh38, e.g. 1-55051526-G-A)."""
+    return gnomad.gnomad_variant_frequency(variant)
 
 
 def main() -> None:
