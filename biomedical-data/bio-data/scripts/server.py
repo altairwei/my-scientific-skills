@@ -20,6 +20,7 @@ sys.path.insert(0, str(HERE))
 import _common  # noqa: E402
 from apis import pubmed  # noqa: E402  (imported incrementally as modules land)
 from apis import mygene  # noqa: E402
+from apis import clinvar  # noqa: E402
 
 from mcp.server import MCPServer  # noqa: E402
 
@@ -54,6 +55,12 @@ def fetch_pmc_fulltext(pmc_ids: list[str]) -> dict:
 def query_genes(query: str, size: int = 10) -> dict:
     """Query MyGene.info by a Lucene-style query (e.g. symbol:BRCA1); return gene hits."""
     return mygene.query_genes(query, size=size)
+
+
+@mcp.tool()
+def fetch_clinvar_variant(accession: str) -> dict:
+    """Fetch ClinVar clinical interpretation for a variant accession (e.g. VCV000045595)."""
+    return clinvar.fetch_clinvar_variant(accession)
 
 
 def main() -> None:
