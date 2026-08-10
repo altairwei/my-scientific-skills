@@ -11,6 +11,8 @@ Skills for bioinformatics and computational biology workflows (population genomi
 | Skill | Description |
 |-------|-------------|
 | [population-genomics](bioinformatics/population-genomics/) | Population-genomics analysis workflows — QC, LD pruning, kinship, PCA, ADMIXTURE, TreeMix, f-statistics, and fastsimcoal2 demographic inference from VCF/PLINK data |
+| [gwas-association-testing](bioinformatics/gwas-association-testing/) | GWAS workflows — genotype QC, PCA stratification, phasing/imputation prep, and association testing with PLINK/REGENIE/SAIGE/LMM, including Firth regression, genomic control, and Manhattan/QQ/regional plots |
+| [post-gwas-analyses](bioinformatics/post-gwas-analyses/) | Post-GWAS analyses of summary statistics — ANNOVAR/VEP annotation, heritability and genetic correlation (GCTA/LDSC), MAGMA gene tests, SuSiE fine-mapping, colocalization, meta-analysis, PRS, Mendelian randomization, TWAS, SMR/HEIDI |
 | [bioinfo-project-organization](bioinformatics/bioinfo-project-organization/) | Organize a computational biology / scientific research project for reproducibility — Noble (2009) layout, per-experiment `runall`, a chronological `lab-notebook.md`, Git practices, and an `artifacts/` directory for large outputs |
 | [pipeline-maker](bioinformatics/pipeline-maker/) | Build or recover a reproducible, modular Snakemake workflow from ad-hoc bash, a Jupyter notebook, or a described goal; mandatory `snakemake -n` dry-run loop, stale-code/force-stop/temp-cleanup recovery |
 
