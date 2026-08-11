@@ -45,7 +45,9 @@ Skills for compute environment setup and infrastructure workflows.
 
 Skills for scientific writing, literature work, and publishing workflows.
 
-*No skills yet — contributions welcome.*
+| Skill | Description |
+|-------|-------------|
+| [pdf-explore](scientific-writing/pdf-explore/) | Navigate a PDF too big to embed — parse once with a stateless `uv run` script, write page text to a file you `Read`, keep figure renders on disk, and dispatch parallel haiku subagents for large-doc scan/extract |
 
 ## Installation
 
@@ -57,6 +59,7 @@ Skills for scientific writing, literature work, and publishing workflows.
 /plugin install data-science@my-scientific-skills
 /plugin install biomedical-data@my-scientific-skills
 /plugin install computing-infrastructure@my-scientific-skills
+/plugin install scientific-writing@my-scientific-skills
 ```
 
 Each category directory is a plugin; install only the categories you need.
@@ -75,6 +78,11 @@ Each category directory is a plugin; install only the categories you need.
 >
 > Then restart Claude Code so the MCP server picks up `uv` on `PATH`. (R sessions also need
 > R installed — see `data-science/interactive-repl/references/r-setup.md`.)
+
+> **`scientific-writing` plugin prerequisite — `uv`:** the `pdf-explore` skill runs a
+> `uv run` helper script; `uv run` auto-installs the PDF deps (pypdfium2/pillow/pypdf) from
+> the script's inline `# /// script` metadata on first call. If `uv` isn't installed, see
+> the steps under `data-science`.
 
 ### Manual
 

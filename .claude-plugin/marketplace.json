@@ -43,7 +43,9 @@
       "description": "Skills for scientific writing, literature work, and publishing workflows",
       "source": "./",
       "strict": false,
-      "skills": []
+      "skills": [
+        "./scientific-writing/pdf-explore"
+      ]
     },
     {
       "name": "computing-infrastructure",
