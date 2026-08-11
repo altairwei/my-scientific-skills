@@ -109,6 +109,7 @@ the warning. `info`'s `mode_hint` field tells you up front which path to take.
 - **Literal keyword search on one PDF** → `grep PATH "term"`; for *repeated* queries, `text --out full.txt` once then `rg`.
 - **PDF creation/manipulation** (merge, watermark, fill forms) → use `reportlab` / `pypdf` directly, not this skill.
 - **A notebook / multi-document corpus** → this skill is per-PDF; for corpus-wide work, extract per-doc text then reason across the files.
+- **Multi-paper search / DOI verification / citation-graph synthesis** → use the `literature-review` skill — it finds+verifies across papers; pdf-explore reads one PDF deeply.
 
 ## Notes
 
