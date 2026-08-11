@@ -51,6 +51,7 @@ Skills for scientific writing, literature work, and publishing workflows.
 | [literature-review](scientific-writing/literature-review/) | Find, verify, and synthesize scientific literature — search OpenAlex/CrossRef, resolve DOIs (catch fabricated citations + retractions), walk the citation graph, and lint the prose; pairs with `pdf-explore` for full-text PDF reading |
 | [figure-style](scientific-writing/figure-style/) | Make one plot correct and legible — publication-grade checklist (data fidelity, label economy, colour/CVD safety, typography, chart choice) plus importable matplotlib helpers and a render-then-verify loop; inner tier of the figure family |
 | [figure-composer](scientific-writing/figure-composer/) | Make one multi-panel figure publication-grade — draft a grid outline from a one-line claim + data, fan out one agent per panel, tile with a stateless `uv run` script, and iterate through an adversarial vision review loop; middle tier of the figure family |
+| [paper-narrative](scientific-writing/paper-narrative/) | Judge and reshape the story a paper's figure deck tells — derive a brief from the manuscript, get a handling-editor verdict (Fig 1 hook test, figure arc, panel moves, analyses to run, kill list), and hand per-figure claims to `figure-composer`; outermost tier of the figure family |
 
 ## Installation
 
