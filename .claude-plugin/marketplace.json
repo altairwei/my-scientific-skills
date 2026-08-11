@@ -45,7 +45,8 @@
       "strict": false,
       "skills": [
         "./scientific-writing/pdf-explore",
-        "./scientific-writing/literature-review"
+        "./scientific-writing/literature-review",
+        "./scientific-writing/figure-style"
       ]
     },
     {

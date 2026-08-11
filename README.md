@@ -49,6 +49,7 @@ Skills for scientific writing, literature work, and publishing workflows.
 |-------|-------------|
 | [pdf-explore](scientific-writing/pdf-explore/) | Navigate a PDF too big to embed — parse once with a stateless `uv run` script, write page text to a file you `Read`, keep figure renders on disk, and dispatch parallel haiku subagents for large-doc scan/extract |
 | [literature-review](scientific-writing/literature-review/) | Find, verify, and synthesize scientific literature — search OpenAlex/CrossRef, resolve DOIs (catch fabricated citations + retractions), walk the citation graph, and lint the prose; pairs with `pdf-explore` for full-text PDF reading |
+| [figure-style](scientific-writing/figure-style/) | Make one plot correct and legible — publication-grade checklist (data fidelity, label economy, colour/CVD safety, typography, chart choice) plus importable matplotlib helpers and a render-then-verify loop; inner tier of the figure family |
 
 ## Installation
 
@@ -83,8 +84,10 @@ Each category directory is a plugin; install only the categories you need.
 > **`scientific-writing` plugin prerequisite — `uv`:** the `pdf-explore` and
 > `literature-review` skills run `uv run` helper scripts; `uv run` auto-installs the PDF
 > deps (pypdfium2/pillow/pypdf for `pdf-explore`; `literature-review` is stdlib-only) from
-> the inline `# /// script` metadata on first call. If `uv` isn't installed, see the steps
-> under `data-science`.
+> the inline `# /// script` metadata on first call. The `figure-style` helpers are an
+> import-only module — your plotting script supplies the deps via
+> `uv run --with matplotlib --with numpy python plot.py`. If `uv` isn't installed, see the
+> steps under `data-science`.
 
 ### Manual
 
