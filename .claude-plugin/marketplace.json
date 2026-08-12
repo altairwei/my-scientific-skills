@@ -19,7 +19,8 @@
         "./bioinformatics/gwas-association-testing",
         "./bioinformatics/post-gwas-analyses",
         "./bioinformatics/bioinfo-project-organization",
-        "./bioinformatics/pipeline-maker"
+        "./bioinformatics/pipeline-maker",
+        "./bioinformatics/locus-novelty"
       ]
     },
     {
