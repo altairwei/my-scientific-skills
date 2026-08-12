@@ -25,6 +25,33 @@ Each entry is the build-spec that renders unchanged through any backend. All exa
 - **validation:** `plink --version` → `PLINK v1.90b`; `admixture --help` → exits 0 with usage
 - **gotchas:** bioconda can fight over the `python` pin — create the env with an explicit `python=3.12` to pin it; ADMIXTURE is single-threaded — scale by splitting chromosomes, not by adding cores
 
+## gwaslab-cpu — yaml-first project env (worked example)
+
+The [gwaslab](https://github.com/Cloufield/gwaslab) `environment.yml` is a good real-world model for a git-tracked, project-level conda env. The pattern, not the exact versions:
+
+- **yaml** (at project root, git-tracked):
+  ```yaml
+  name: gwaslab
+  channels:
+    - conda-forge
+  dependencies:
+    - python>=3.9,<3.13          # bounded, not pinned
+    - pip=24.0                    # pip version managed by conda
+    - jupyter==1.0.0
+    - pip:                        # everything else via pip
+        - gwaslab==4.2.0
+        - numpy>=1.21.2,<2        # tolerant-but-bounded; exclude known-bad
+        - pandas>=1.3,!=1.5
+        - pysam==0.22.1
+        - scikit-allel>=1.3.5
+        - scipy>=1.12
+        - h5py>=3.10.0
+        - polars>=1.27.0
+  ```
+- **rebuild on a new host:** `chsrc set conda` + `chsrc set pip` → `conda env create -f environment.yml`
+- **validation:** `conda env list` shows `gwaslab`; `python -c "import gwaslab, pysam, polars; print(gwaslab.__version__)"` imports clean
+- **gotchas:** single `channels: [conda-forge]`, no defaults mixing — mirrors are `~/.condarc`'s job, not the yaml's. The `>=`/`<` bounds let the solve drift within a safe window — for bit-for-bit rebuilds add a lock file (conda-lock or `pip freeze > requirements.lock.txt`). A `pip:` block is a *single* pip invocation — if you need load-bearing install ordering, use `pip_phases` instead (see torch-gpu).
+
 ## torch-gpu — PyTorch CUDA stack with ordered pip phases
 
 - **base:** `pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel` (devel: flash-attn compiles via nvcc) or `conda create -n torch-gpu python=3.11`

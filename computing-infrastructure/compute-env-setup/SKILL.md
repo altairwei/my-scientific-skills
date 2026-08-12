@@ -15,6 +15,8 @@ An environment is a software stack (specific package versions, often with load-b
 
 **Before building anything:** read the private ledger (below) — the env, or a near-match you can extend, may already exist. That same ledger is where you record what you set up.
 
+**How reproducible should the env be?** Match the artifact to what actually differs between environments (OS → container, dependencies → yaml+lock, data → ledger). Conda resolves the dependency graph; only a container closes the whole userspace. See `references/reproducibility.md` for the layer table and decision rules — read it before you reach for a container, and note the rule: **ImportError → install, don't work around**.
+
 ## Step 0 — Software sources (mirrors) first
 
 On any host where downloads are slow or timing out, fix the source **before** installing. This is the most common cause of "software download/install timeout" — beginners get stuck here for weeks.
@@ -33,7 +35,12 @@ On any host where downloads are slow or timing out, fix the source **before** in
 
 Recognise which shape you're in — it determines what "build", "register", and "resolve" mean. Shapes blend at the edges; you're recognising, not choosing.
 
-**Local conda/venv.** You have a shell on the machine. No image step: read the spec's `pip_phases` and run them in order after `conda create -n <name> python=<X>` (or `python -m venv`). The env name *is* the name — no aliasing layer. Weights live in scratch or home; download once, point the tool's cache env var there. "Registering" = appending a ledger block. Lowest ceremony; right for a personal machine.
+**Local conda/venv.** You have a shell on the machine. Two ways to build, chosen by how the env will be reused:
+
+- **Project-level (yaml-first).** The portable artifact is a git-tracked `environment.yml` at the project root (echoes the reproducible-project layout of the bioinfo-project-organization skill). `channels:` (conda-forge before bioconda), `dependencies` for conda packages, a `pip:` sub-list for the rest. Rebuild on a new host: clone the repo → `chsrc set conda` + `chsrc set pip` → `conda env create -f environment.yml`. For bit-for-bit rebuilds, add a lock file (conda-lock or `pip freeze`); the yaml is the readable spec, the lock is the machine-readable one. Constraints: the yaml's `pip:` block is a *single* pip invocation — for load-bearing install ordering keep the ordered `pip_phases` instead (see below). The env name *is* the name — no aliasing layer.
+- **Ad-hoc (spec-first).** Read the spec's `pip_phases` and run them in order after `conda create -n <name> python=<X>` (or `python -m venv`). Right for a quick personal env; promote to a yaml when the env matters.
+
+Weights live in scratch or home; download once, point the tool's cache env var there. "Registering" = appending a ledger block (record the yaml's path if yaml-first). Lowest ceremony; right for a personal machine.
 
 **Docker (local build).** You build an image from a Dockerfile: `base` → `FROM`, `system_pkgs` → `apt-get`, `pip_phases` → ordered `RUN pip install`, `env` → `ENV`, `shim_files` → `COPY`, `run_commands` → `RUN`. A registry mirror (`chsrc set docker`) fixes pull timeouts. Register = tag (+ push to a registry); resolve = `docker run --gpus all ...`.
 
@@ -80,6 +87,8 @@ When a documented invocation doesn't work, don't patch (add a flag, symlink a pa
 |---|---|---|
 | pip `ReadTimeoutError` / `Could not fetch URL ... connection broken` | network/mirror | Default PyPI unreachable. `chsrc set pip`, retry |
 | conda `CondaHTTPError: HTTP 000 CONNECTION FAILED` | network/mirror | `chsrc set conda`, retry |
+| conda "Could not solve for environment specs" | spec | Channel/pin conflict. Add `-c conda-forge -c bioconda` (forge first) or `channel_priority: strict`; raise the `python` bound; split the env |
+| conda install hangs for 10+ min (solve) | spec | Defaults solver is slow with bioconda. Use `mamba`/`micromamba` as a drop-in |
 | apt `Failed to fetch ... Connection timed out` | network/mirror | `sudo chsrc set ubuntu` (or `debian`), `apt update`, retry |
 | `no kernel image is available for execution` | build/spec | torch/jax compiled for older SM than this GPU. Record `sm_range` per env; rebuild only if no compatible hardware exists |
 | `AttributeError: module 'numpy' has no attribute 'int'` | spec | Vendored dep predates numpy 1.24's alias removal. sed `np.int/float/bool/object` → builtins; don't delete the importing code (masks the symptom) |
@@ -93,6 +102,8 @@ When a documented invocation doesn't work, don't patch (add a flag, symlink a pa
 | Job COMPLETED but output dir empty | exec | The wrapper that writes the phase marker never ran — often `#!/bin/bash` on a minimal runtime that only ships `/bin/sh` |
 
 When you hit one of these, append symptom + fix to that host's ledger so the next agent doesn't rediscover it — when the symptom is a property of the provider, not of this project's data.
+
+Related, at the boundary of spec and reproducibility: a dependency list must be **complete** (every runtime dep declared, or a `--no-deps` skip silently loses one) and **ordered** (each phase its own pip call, so an already-satisfied pin isn't upgraded). Adding a dep to the yaml or a phase is how you make the env rebuildable — the install is the test of that list.
 
 ## The private ledger — recording what's set up
 
