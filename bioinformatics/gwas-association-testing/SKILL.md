@@ -49,6 +49,7 @@ Focused shortcuts by goal:
 - **Genomic control λ_GC ≈ 1.0** is the expectation for a well-behaved analysis. λ much above 1.0 signals stratification, cryptic relatedness, or model misspecification — diagnose before reporting results. Note the assumption fails for highly polygenic traits.
 - **Never report or interpret a P value without knowing which allele it refers to** (A1 = effect allele), whether the model was linear or logistic, and what covariates were adjusted for.
 - **Significance:** genome-wide P < 5×10⁻⁸ (Bonferroni for ~1M independent tests); P between 1×10⁻⁵ and 5×10⁻⁸ is "suggestive" and needs replication.
+- **Manhattan/QQ plots:** use a mature package like [`gwaslab`](https://github.com/Cloufield/gwaslab); never hand-roll downsampling of null variants (it carves a density cliff into the haze). Plot every point and control PDF size by rasterizing, not subsampling. See association-models for the full rule.
 
 ## Concept map
 
