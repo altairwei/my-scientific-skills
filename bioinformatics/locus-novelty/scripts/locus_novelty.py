@@ -50,7 +50,13 @@ def _compute_r2(study_snp, catalog_snps, args):
         pairs = ld_plink.plink_r2(study_snp, catalog_snps, args.ld_panel)
         return {b if a == study_snp else a: r2 for (a, b), r2 in pairs.items()}
     pop = args.ancestry
-    proxies = ldlink.ldproxy_r2(study_snp, pop=pop)
+    try:
+        proxies = ldlink.ldproxy_r2(study_snp, pop=pop)
+    except Exception as e:
+        raise RuntimeError(
+            f"LDlink ldproxy failed for {study_snp} (pop={pop}): {e}. "
+            "If the service is down (503), retry later or rerun with "
+            "--ld-source plink --ld-panel <bfile>.") from e
     return {sn: proxies.get(sn) for sn in catalog_snps if proxies.get(sn) is not None}
 
 
