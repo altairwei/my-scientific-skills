@@ -65,21 +65,22 @@ def run_pipeline(loci: list[dict], out_dir: Path, ancestry: str, ld_source: str,
         reg_assocs = gwas_catalog.region_associations(loc["chr"],
                                                        loc["pos_hg38"] - locus_window,
                                                        loc["pos_hg38"] + locus_window)["associations"]
-        all_assocs = snp_assocs + reg_assocs
+        all_assocs = list({a["association_id"]: a for a in (snp_assocs + reg_assocs)
+                           if a.get("association_id")}.values())
         study_efo = ols.efo_lookup(loc["trait"])
         prior_reports = []
         catalog_snps = list({a["lead_snp"] for a in all_assocs if a.get("lead_snp") and a["lead_snp"] != rsid})
         r2_map = _compute_r2(rsid, catalog_snps, _Args(ld_source, ld_panel, ancestry)) if catalog_snps else {}
         for a in all_assocs:
             lead = a.get("lead_snp", "")
-            if not lead or lead == rsid:
+            if not lead:
                 continue
             prior_efo = None
             if a.get("efo_traits"):
                 prior_efo = ols.efo_lookup(a["efo_traits"][0])
             prior_reports.append({
                 "catalog_lead": lead,
-                "r2": r2_map.get(lead),
+                "r2": 1.0 if lead == rsid else r2_map.get(lead),   # self-cataloged -> perfect LD
                 "efo_traits": a.get("efo_traits", []),
                 "efo_match_type": ols.efo_distance(study_efo, prior_efo),
             })

@@ -7,7 +7,7 @@ from urllib.parse import quote
 
 import _common
 
-BASE = "https://www.ebi.ac.uk/ols/api"
+BASE = "https://www.ebi.ac.uk/ols4/api"
 
 
 def _client(transport=None) -> _common.HttpClient:
