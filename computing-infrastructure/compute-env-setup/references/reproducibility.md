@@ -1,13 +1,13 @@
 ---
 name: environment-reproducibility
-description: Read alongside compute-env-setup when deciding how reproducible an environment must be and which artifact to use. Triggers on "container vs conda", "reproducible env", "which layer", "OS drift", "glibc".
+description: Read alongside compute-env-setup when deciding how reproducible an environment must be and which deliverable to use. Triggers on "container vs conda", "reproducible env", "which layer", "OS drift", "glibc".
 ---
 
 # How reproducible should the environment be?
 
-Match the artifact to what actually differs between environments — be honest about each layer's scope.
+Match the deliverable to what actually differs between environments — be honest about each layer's scope.
 
-| Layer | What it controls | Artifact | Git-tracked? |
+| Layer | What it controls | Deliverable | Git-tracked? |
 |---|---|---|---|
 | OS | glibc, dynamic linker, userspace, ABI | Dockerfile / Apptainer `.def` → `.sif` | yes (the `.def`) |
 | Dependencies | package versions, channels | `environment.yml` + conda-lock | yes |
@@ -18,7 +18,7 @@ Match the artifact to what actually differs between environments — be honest a
 - **OS-level drift** (older glibc on compute nodes, missing system libs) is a container's promise, **not** conda's — conda locks the dependency graph, containers lock the whole userspace. Use containers when hosts differ at the OS layer; use conda/venv when they share an OS.
 - **No root** (shared university hosts, many clusters) rules out Docker and often even `apptainer build` — conda is the only privilege-free layer. Build containers off-cluster and `pull` instead.
 - **Iteration speed** matters: yaml rebuilds are seconds-to-minutes, image rebuilds minutes-to-hours. Develop in conda, freeze to a container only when the OS layer or deliverable demands it.
-- **YAGNI**: a pure-Python toolchain (PLINK/ADMIXTURE, most bioconda stacks) has no system-level deps — a container is over-engineering. A GPU tool with CUDA kernels is a different story: the driver/SM is the host's, which no userspace artifact controls — which is exactly why the validation ladder exists.
+- **YAGNI**: a pure-Python toolchain (PLINK/ADMIXTURE, most bioconda stacks) has no system-level deps — a container is over-engineering. A GPU tool with CUDA kernels is a different story: the driver/SM is the host's, which no userspace deliverable controls — which is exactly why the validation ladder exists.
 - **ImportError → install, don't work around.** Never substitute a different library to dodge a missing one — install the missing package (often via `pip` in the env, or conda). Prefer reusing an existing domain env over creating a new one.
 
 ## Why bit-for-bit reproducibility is not conda's job

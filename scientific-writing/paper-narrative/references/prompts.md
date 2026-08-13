@@ -98,7 +98,7 @@ is trying to do; your job is the arc, not §-compliance.
    where, and why the story improves.
 4. **missing_panels** — panels the story needs but doesn't have. For each, the
    concrete analysis to RUN and a data hint (the author will search their
-   project artifacts for the data first).
+   project's output files for the data first).
 5. **kill_list** — what to demote to supplement, fold into a caption, or
    delete outright.
 6. **boldest_defensible_fig1** — the strongest Figure 1 the evidence can

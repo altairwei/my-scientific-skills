@@ -47,7 +47,7 @@ question; the arc it returns tells you which figures to compose at all.
    - `arc[]` → the main-figure order; anything off it → supplement.
    - `figure_moves[]` → move panels between figures.
    - `missing_panels[]` → analyses to **RUN** — search the project's data
-     artifacts for what each needs *before* concluding the data doesn't exist.
+     output files for what each needs *before* concluding the data doesn't exist.
    - `kill_list[]` → demote or delete.
    - `boldest_defensible_fig1` → the new Fig 1 claim.
 5. **Compose per arc entry.** For each figure on the new arc, hand its claim

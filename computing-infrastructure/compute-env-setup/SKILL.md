@@ -15,7 +15,7 @@ An environment is a software stack (specific package versions, often with load-b
 
 **Before building anything:** read the private ledger (below) — the env, or a near-match you can extend, may already exist. That same ledger is where you record what you set up.
 
-**How reproducible should the env be?** Match the artifact to what actually differs between environments (OS → container, dependencies → yaml+lock, data → ledger). Conda resolves the dependency graph; only a container closes the whole userspace. See `references/reproducibility.md` for the layer table and decision rules — read it before you reach for a container, and note the rule: **ImportError → install, don't work around**.
+**How reproducible should the env be?** Match the deliverable to what actually differs between environments (OS → container, dependencies → yaml+lock, data → ledger). Conda resolves the dependency graph; only a container closes the whole userspace. See `references/reproducibility.md` for the layer table and decision rules — read it before you reach for a container, and note the rule: **ImportError → install, don't work around**.
 
 ## Step 0 — Software sources (mirrors) first
 
@@ -37,7 +37,7 @@ Recognise which shape you're in — it determines what "build", "register", and 
 
 **Local conda/venv.** You have a shell on the machine. Two ways to build, chosen by how the env will be reused:
 
-- **Project-level (yaml-first).** The portable artifact is a git-tracked `environment.yml` at the project root (echoes the reproducible-project layout of the bioinfo-project-organization skill). `channels:` (conda-forge before bioconda), `dependencies` for conda packages, a `pip:` sub-list for the rest. Rebuild on a new host: clone the repo → `chsrc set conda` + `chsrc set pip` → `conda env create -f environment.yml`. For bit-for-bit rebuilds, add a lock file (conda-lock or `pip freeze`); the yaml is the readable spec, the lock is the machine-readable one. Constraints: the yaml's `pip:` block is a *single* pip invocation — for load-bearing install ordering keep the ordered `pip_phases` instead (see below). The env name *is* the name — no aliasing layer.
+- **Project-level (yaml-first).** The portable deliverable is a git-tracked `environment.yml` at the project root (echoes the reproducible-project layout of the bioinfo-project-organization skill). `channels:` (conda-forge before bioconda), `dependencies` for conda packages, a `pip:` sub-list for the rest. Rebuild on a new host: clone the repo → `chsrc set conda` + `chsrc set pip` → `conda env create -f environment.yml`. For bit-for-bit rebuilds, add a lock file (conda-lock or `pip freeze`); the yaml is the readable spec, the lock is the machine-readable one. Constraints: the yaml's `pip:` block is a *single* pip invocation — for load-bearing install ordering keep the ordered `pip_phases` instead (see below). The env name *is* the name — no aliasing layer.
 - **Ad-hoc (spec-first).** Read the spec's `pip_phases` and run them in order after `conda create -n <name> python=<X>` (or `python -m venv`). Right for a quick personal env; promote to a yaml when the env matters.
 
 Weights live in scratch or home; download once, point the tool's cache env var there. "Registering" = appending a ledger block (record the yaml's path if yaml-first). Lowest ceremony; right for a personal machine.
@@ -50,7 +50,7 @@ Weights live in scratch or home; download once, point the tool's cache env var t
 
 ## The declarative spec
 
-The portable artefact is a dict describing what the env *is*, independent of how any backend builds it. Every field maps to something each shape understands:
+The portable spec is a dict describing what the env *is*, independent of how any backend builds it. Every field maps to something each shape understands:
 
 | Field | Meaning | Why it's portable |
 |---|---|---|

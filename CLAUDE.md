@@ -47,6 +47,13 @@ The body is instructions written **for Claude, not for end users**:
 - Keep `SKILL.md` under 500 lines / ~5,000 tokens. Move large reference material into `references/*.md` with clear pointers about when to read each file (progressive disclosure).
 - Keep `description` under ~100 tokens and make it slightly "pushy" — name the tasks, file types, and phrases that should trigger the skill, even when the user doesn't name the skill explicitly.
 
+## Terminology: never publish "artifacts"
+
+Claude's artifact/publish feature uploads content to Anthropic's servers. This repo's skills handle unpublished research data — outputs must stay on the local filesystem, written with the `Write` tool.
+
+- **Don't use the bare word "artifact" for anything Claude produces.** It primes the publish feature. Say "output file", "document", or "the .md file" instead. (There is no `save_artifacts` tool in Claude Code — `Write` is the file tool.)
+- **"artifact" is fine where it is not an output-instruction:** the `artifacts/` directory (Noble 2009 project layout) and domain terms like "LD artifact", "genotyping artifact", "down-fill artifact". Those name a path or a phenomenon; they don't tell Claude to produce or upload anything.
+
 ## Registering a skill
 
 After creating a skill directory, add it to the appropriate plugin in `.claude-plugin/marketplace.json`. A cross-category skill may be listed under multiple plugins. Each plugin needs a matching install line in the root `README.md`, and the category table in `README.md` should list the new skill with a one-line description.

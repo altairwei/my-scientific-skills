@@ -97,7 +97,7 @@ set with literature-review, read the key paper's details with pdf-explore.
 
 ## 6. Style pass before saving
 
-Before saving the artifact, run the lint once on the full markdown:
+Before saving the file, run the lint once on the full markdown:
 
 ```bash
 LR style-pass review.md
