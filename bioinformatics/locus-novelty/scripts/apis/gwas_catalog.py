@@ -37,6 +37,36 @@ def _efo_traits(a: dict, client: Optional[_common.HttpClient]) -> list[str]:
     return [t.get("trait", "") for t in (data.get("_embedded") or {}).get("efoTraits", [])]
 
 
+def _study(a: dict, client: Optional[_common.HttpClient]) -> dict:
+    """Fetch the supporting study for an association: provenance for evidence-base judgment."""
+    aid = _association_id(a)
+    if not aid or client is None:
+        return {}
+    data = client.get(f"associations/{aid}/study")
+    pub = data.get("publicationInfo") or {}
+    yr = (pub.get("publicationDate") or "")[:4]
+    ancs = []
+    for a_ in (data.get("ancestries") or []):
+        ancs.append({
+            "type": a_.get("type"),
+            "n": a_.get("numberOfIndividuals"),
+            "ancestral_groups": [g.get("ancestralGroup") for g in (a_.get("ancestralGroups") or []) if g.get("ancestralGroup")],
+            "country": [c.get("countryName") for c in (a_.get("countryOfRecruitment") or []) if c.get("countryName")],
+        })
+    return {
+        "accession": data.get("accessionId"),
+        "pmid": pub.get("pubmedId"),
+        "title": pub.get("title"),
+        "author": (pub.get("author") or {}).get("fullname"),
+        "journal": pub.get("publication"),
+        "year": int(yr) if yr.isdigit() else None,
+        "n_initial": data.get("initialSampleSize"),
+        "n_replication": data.get("replicationSampleSize"),
+        "ancestries": ancs,
+        "abstract": None,   # filled later by locus_novelty._attach_abstracts
+    }
+
+
 def _normalise(a: dict, client: Optional[_common.HttpClient] = None) -> dict:
     loci = a.get("loci") or []
     genes = []
@@ -47,6 +77,7 @@ def _normalise(a: dict, client: Optional[_common.HttpClient] = None) -> dict:
         "lead_snp": _lead_snp(a),
         "efo_traits": _efo_traits(a, client),
         "reported_genes": genes,
+        "study": _study(a, client),
         "pvalue": a.get("pvalue"),
         "pvalue_mantissa": a.get("pvalueMantissa"),
         "pvalue_exponent": a.get("pvalueExponent"),
