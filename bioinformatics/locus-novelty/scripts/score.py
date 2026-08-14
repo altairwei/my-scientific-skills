@@ -34,3 +34,43 @@ def combine(snp_level: str, locus_level: str) -> str:
     if snp_level == "shared_signal_different_trait":
         return f"shared_signal_different_trait/{locus_level}"
     return f"{snp_level}/{locus_level}"
+
+
+def evidence_descriptors(prior_reports: list[dict]) -> dict:
+    """Objective summaries of the supporting-study evidence — NOT a verdict.
+
+    The agent reads these + the abstracts and assigns the evidence verdict;
+    rigid thresholds mislead (same-biobank studies aren't independent, etc.).
+    Studies are deduped by accession (one study reporting several associations
+    at the locus counts once), but all ancestry facts are aggregated.
+    """
+    studies: set[str] = set()
+    ancestries: set[str] = set()
+    max_n = 0
+    years: list[int] = []
+    has_replication = False
+    for p in prior_reports:
+        s = p.get("study") or {}
+        acc = s.get("accession")
+        if acc:
+            studies.add(acc)
+        for anc in (s.get("ancestries") or []):
+            if anc.get("type") == "replication":
+                has_replication = True
+            for g in (anc.get("ancestral_groups") or []):
+                if g:
+                    ancestries.add(g)
+            n = anc.get("n")
+            if isinstance(n, (int, float)) and n > max_n:
+                max_n = int(n)
+        y = s.get("year")
+        if isinstance(y, int):
+            years.append(y)
+    return {
+        "n_studies": len(studies),
+        "n_ancestries": len(ancestries),
+        "ancestry_set": sorted(ancestries),
+        "max_n": max_n or None,
+        "year_range": [min(years), max(years)] if years else None,
+        "has_replication": has_replication,
+    }

@@ -1,5 +1,5 @@
 # bioinformatics/locus-novelty/tests/test_score.py
-from score import snp_level_verdict, locus_level_verdict, combine
+from score import snp_level_verdict, locus_level_verdict, combine, evidence_descriptors
 
 
 def _prior(lead, r2, efo):
@@ -42,3 +42,34 @@ def test_combine_fully_novel():
 
 def test_combine_known_signal_known_locus():
     assert combine("known", "known") == "known"
+
+
+def _prior_with_study(lead, study):
+    return {"catalog_lead": lead, "r2": 0.0, "efo_match_type": "exact", "study": study}
+
+
+def test_evidence_descriptors_dedups_studies_and_aggregates_ancestry():
+    priors = [
+        _prior_with_study("rs1", {"accession": "GCST1", "year": 2021,
+            "ancestries": [{"type": "initial", "n": 141355,
+                            "ancestral_groups": ["European"], "country": ["Finland"]}]}),
+        _prior_with_study("rs2", {"accession": "GCST1", "year": 2021,   # same study, 2nd association -> dedup count
+            "ancestries": [{"type": "replication", "n": 233398,
+                            "ancestral_groups": ["European"], "country": ["Estonia"]}]}),
+        _prior_with_study("rs3", {"accession": "GCST2", "year": 2015,
+            "ancestries": [{"type": "initial", "n": 20000,
+                            "ancestral_groups": ["East Asian"], "country": ["Japan"]}]}),
+    ]
+    d = evidence_descriptors(priors)
+    assert d["n_studies"] == 2                  # GCST1 reported twice -> counts once
+    assert d["n_ancestries"] == 2              # European, East Asian
+    assert d["ancestry_set"] == ["East Asian", "European"]   # sorted
+    assert d["max_n"] == 233398
+    assert d["year_range"] == [2015, 2021]
+    assert d["has_replication"] is True
+
+
+def test_evidence_descriptors_empty_when_no_studies():
+    assert evidence_descriptors([]) == {
+        "n_studies": 0, "n_ancestries": 0, "ancestry_set": [],
+        "max_n": None, "year_range": None, "has_replication": False}
