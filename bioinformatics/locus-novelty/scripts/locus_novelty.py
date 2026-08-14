@@ -16,7 +16,7 @@ sys.path.insert(0, str(HERE))
 import _common  # noqa: E402
 import report  # noqa: E402
 import ld_plink  # noqa: E402
-from apis import ensembl, gwas_catalog, ols, ldlink  # noqa: E402
+from apis import ensembl, gwas_catalog, ols, ldlink, pubmed  # noqa: E402
 
 
 def _read_loci(csv_path: str) -> list[dict]:
@@ -60,6 +60,18 @@ def _compute_r2(study_snp, catalog_snps, args):
     return {sn: proxies.get(sn) for sn in catalog_snps if proxies.get(sn) is not None}
 
 
+def _attach_abstracts(prior_reports: list[dict], client) -> list[dict]:
+    """Fill study.abstract for each prior by PMID (studies without a PMID are skipped)."""
+    pmids = list({p["study"]["pmid"] for p in prior_reports
+                  if (p.get("study") or {}).get("pmid")})
+    abs_map = pubmed.abstracts(pmids, client=client) if pmids else {}
+    for p in prior_reports:
+        s = p.get("study")
+        if s and s.get("pmid"):
+            s["abstract"] = abs_map.get(s["pmid"], "")
+    return prior_reports
+
+
 def run_pipeline(loci: list[dict], out_dir: Path, ancestry: str, ld_source: str,
                  ld_panel: str | None, r2_threshold: float, locus_window: int,
                  commands: list[str]) -> list[dict]:
@@ -90,6 +102,7 @@ def run_pipeline(loci: list[dict], out_dir: Path, ancestry: str, ld_source: str,
                 "efo_traits": a.get("efo_traits", []),
                 "efo_match_type": ols.efo_distance(study_efo, prior_efo),
             })
+        _attach_abstracts(prior_reports, pubmed._client())
         loc["study_efo"] = study_efo
         loc["prior_reports"] = prior_reports
         loc["r2_threshold"] = r2_threshold
@@ -124,7 +137,7 @@ def main():
                               args.ld_panel, args.r2_threshold, args.locus_window, commands)
     print(f"Wrote {len(candidates)} loci to {args.output}/")
     print(f"  candidates.json + draft_verdict.csv + reproducibility/")
-    print("Next: read candidates.json, apply EFO judgment per locus, present verdict table for user.")
+    print("Next: read candidates.json, apply evidence-base judgment per locus, present verdict table for user.")
 
 
 if __name__ == "__main__":
