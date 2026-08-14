@@ -52,6 +52,25 @@ The [gwaslab](https://github.com/Cloufield/gwaslab) `environment.yml` is a good 
 - **validation:** `conda env list` shows `gwaslab`; `python -c "import gwaslab, pysam, polars; print(gwaslab.__version__)"` imports clean
 - **gotchas:** single `channels: [conda-forge]`, no defaults mixing — mirrors are `~/.condarc`'s job, not the yaml's. The `>=`/`<` bounds let the solve drift within a safe window — for bit-for-bit rebuilds add a lock file (conda-lock or `pip freeze > requirements.lock.txt`). A `pip:` block is a *single* pip invocation — if you need load-bearing install ordering, use `pip_phases` instead (see torch-gpu).
 
+## Organizing multiple environment files
+
+One project, several required envs. Keep the root clean — one main file at the root, optional variants in `env/`:
+
+```
+myproj/
+├── environment.yml          # main env (default/baseline)
+├── env/
+│   ├── gpu.yml              # variant — filename is the suffix
+│   ├── dev.yml
+│   └── macos.yml
+└── src/...
+```
+
+- `environment.yml` at the root is the semantic anchor: `conda env create -f environment.yml` works with no extra path; it sits alongside README/pyproject as a project entry point.
+- Optional variants live in `env/`, named by what they add (`gpu.yml`, `dev.yml`) — `conda env create -f env/gpu.yml`. Variants are **complete, standalone files** (yaml has no include), but share the core dependency block — change core deps in one place.
+- Split by what actually differs: dependency sets → separate files; platform → separate lock, not separate yaml; dev tooling → a dev variant on the shared base.
+- When you register an env in the ledger, record the yaml's path (`how: conda env from <repo>/environment.yml` or `env/gpu.yml`).
+
 ## torch-gpu — PyTorch CUDA stack with ordered pip phases
 
 - **base:** `pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel` (devel: flash-attn compiles via nvcc) or `conda create -n torch-gpu python=3.11`
