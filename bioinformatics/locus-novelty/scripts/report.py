@@ -6,7 +6,7 @@ import csv
 import json
 from pathlib import Path
 
-from score import snp_level_verdict, locus_level_verdict, combine
+from score import snp_level_verdict, locus_level_verdict, combine, evidence_descriptors
 
 
 def build_candidates(loci: list[dict]) -> list[dict]:
@@ -20,7 +20,9 @@ def build_candidates(loci: list[dict]) -> list[dict]:
             "pos_hg38": loc["pos_hg38"], "p": loc.get("p"),
             "study_efo": loc.get("study_efo"),
             "prior_reports": priors,
+            "evidence_summary": evidence_descriptors(priors),
             "snp_level_auto": snp, "locus_level_auto": locus, "combined_auto": combine(snp, locus),
+            "evidence_level": None,            # agent assigns: well_replicated/single_study/limited_evidence/n/a
             "agent_judgment": None, "user_confirmed": None,
         })
     return out
@@ -30,7 +32,7 @@ def write_outputs(candidates: list[dict], out_dir: Path, commands: list[str]):
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "candidates.json").write_text(json.dumps(candidates, indent=2, default=str))
     cols = ["trait", "lead_snp", "chr", "pos_hg38", "p", "snp_level_auto", "locus_level_auto",
-            "combined_auto", "agent_judgment", "user_confirmed"]
+            "combined_auto", "evidence_level", "agent_judgment", "user_confirmed"]
     with open(out_dir / "draft_verdict.csv", "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=cols)
         w.writeheader()
