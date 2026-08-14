@@ -119,7 +119,7 @@ class _Args:
 
 
 def main():
-    ap = argparse.ArgumentParser(description="locus-novelty: two-level known/novel assessment")
+    ap = argparse.ArgumentParser(description="locus-novelty: three-level known/novel assessment")
     ap.add_argument("--loci", required=True, help="CSV of lead loci (trait,chr,pos_hg38,lead_snp,p)")
     ap.add_argument("--output", "-o", required=True, help="Output directory")
     ap.add_argument("--ancestry", default="EUR", help="1000G population for LDlink (EUR/AFR/AMR/EAS/SAS)")
