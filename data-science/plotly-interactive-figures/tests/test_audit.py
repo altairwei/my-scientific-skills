@@ -35,6 +35,13 @@ def test_audit_rejects_garbage():
         pa.audit(42)
 
 
+def test_audit_rejects_dataframe():
+    import pandas as pd
+    df = pd.DataFrame({"x": [1, 2], "y": [3, 4]})
+    with pytest.raises(TypeError, match="to_dict"):
+        pa.audit(df)
+
+
 def test_finding_as_dict_roundtrip():
     f = pa.Finding("x", "warn", "msg", "fix", "https://plotly.com/python/legend/")
     assert f.as_dict() == {"id": "x", "severity": "warn", "message": "msg",

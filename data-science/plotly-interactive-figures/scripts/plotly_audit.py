@@ -47,11 +47,17 @@ class Finding:
 
 
 def _to_spec(fig_or_spec: Any) -> dict:
-    """Accept a go.Figure / px figure (duck-typed .to_dict) or a parsed spec dict."""
-    if hasattr(fig_or_spec, "to_dict"):
-        return fig_or_spec.to_dict()
+    """Accept a go.Figure / px figure (duck-typed .to_dict) or a parsed spec dict.
+
+    Dict-first: pandas DataFrames also have a .to_dict() whose output has no
+    "data" key — reject them (shape-check) instead of silently auditing {}.
+    """
     if isinstance(fig_or_spec, dict):
         return fig_or_spec
+    if hasattr(fig_or_spec, "to_dict"):
+        spec = fig_or_spec.to_dict()
+        if isinstance(spec, dict) and "data" in spec:
+            return spec
     raise TypeError(
         f"audit() expects a Plotly Figure or a to_dict() dict, got {type(fig_or_spec).__name__}")
 
