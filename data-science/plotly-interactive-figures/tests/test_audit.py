@@ -80,3 +80,23 @@ def test_unique_names_not_flagged():
     fig = go.Figure([go.Scatter(x=[1], y=[1], name="a"),
                      go.Scatter(x=[1], y=[2], name="b")])
     assert "duplicate_trace_name" not in _ids(pa.audit(fig))
+
+
+# ── cliponaxis + text ──────────────────────────────────────────────────────────
+
+def test_text_trace_cliponaxis_flagged():
+    fig = go.Figure(go.Scatter(x=[1, 2], y=[1, 2], text=["a", "b"], mode="markers+text"))
+    assert "cliponaxis_text" in _ids(pa.audit(fig))
+
+
+def test_cliponaxis_false_not_flagged():
+    fig = go.Figure(go.Scatter(x=[1, 2], y=[1, 2], text=["a", "b"],
+                               mode="markers+text", cliponaxis=False))
+    assert "cliponaxis_text" not in _ids(pa.audit(fig))
+
+
+# ── hover disabled ─────────────────────────────────────────────────────────────
+
+def test_hoverinfo_none_flagged():
+    fig = go.Figure(go.Scatter(x=[1], y=[1], hoverinfo="none"))
+    assert "hover_disabled" in _ids(pa.audit(fig))

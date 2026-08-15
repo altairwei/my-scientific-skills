@@ -122,4 +122,34 @@ def _check_duplicate_names(spec: dict) -> list[Finding]:
     return out
 
 
-_CHECKS = [_check_empty_traces, _check_duplicate_names]
+def _check_cliponaxis_text(spec: dict) -> list[Finding]:
+    # cliponaxis defaults to True (per the official figure-introspection doc); text
+    # labels crossing an axis line are clipped when it's True.
+    out = []
+    for i, tr in enumerate(_traces(spec)):
+        mode = tr.get("mode", "")
+        if "text" not in mode:
+            continue
+        clip = tr.get("cliponaxis")
+        if clip is None or clip is True:
+            shown = "default True" if clip is None else "True"
+            out.append(Finding("cliponaxis_text", "warn",
+                f"trace[{i}] shows text with cliponaxis={shown} — labels crossing an axis line will be clipped at the edge",
+                "fig.update_traces(cliponaxis=False, selector=...) keeps text visible past the axes",
+                DOC + "figure-introspection/"))
+    return out
+
+
+def _check_hover_disabled(spec: dict) -> list[Finding]:
+    out = []
+    for i, tr in enumerate(_traces(spec)):
+        if tr.get("hoverinfo") == "none":
+            out.append(Finding("hover_disabled", "warn",
+                f"trace[{i}] has hoverinfo='none' — hover is fully disabled on this trace",
+                "remove hoverinfo='none', or set a hovertemplate for richer hover",
+                DOC + "hover-text-and-formatting/"))
+    return out
+
+
+_CHECKS = [_check_empty_traces, _check_duplicate_names,
+           _check_cliponaxis_text, _check_hover_disabled]
