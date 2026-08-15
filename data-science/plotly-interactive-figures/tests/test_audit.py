@@ -212,3 +212,17 @@ def test_numpy_empty_trace_flagged():
     import numpy as np
     fig = go.Figure(go.Scatter(x=np.array([]), y=np.array([])))
     assert "empty_trace" in _ids(pa.audit(fig))
+
+
+# ── margin vs edge annotation ─────────────────────────────────────────────────
+
+def test_small_right_margin_with_edge_annotation_flagged():
+    fig = go.Figure(go.Scatter(x=[1, 2], y=[1, 2]))
+    fig.update_layout(margin=dict(r=10),
+                      annotations=[dict(text="note", x=0.98, y=0.5, xref="paper", yref="paper")])
+    assert any(i.startswith("margin_") for i in _ids(pa.audit(fig)))
+
+
+def test_default_margin_not_flagged():
+    fig = go.Figure(go.Scatter(x=[1, 2], y=[1, 2]))
+    assert not any(i.startswith("margin_") for i in _ids(pa.audit(fig)))

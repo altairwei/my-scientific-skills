@@ -281,7 +281,32 @@ def _check_axis_range_excludes_data(spec: dict) -> list[Finding]:
     return out
 
 
+def _check_margin_vs_edge_content(spec: dict) -> list[Finding]:
+    # A small margin on a side that has paper-coord content (annotation near the
+    # edge) risks clipping. Axis-title clipping can't be checked from the skeleton
+    # (its rendered position is a Plotly.js default) — that goes to the
+    # full_figure_for_development escalation, not this check.
+    out = []
+    layout = _layout(spec)
+    margin = layout.get("margin", {}) or {}
+    anns = layout.get("annotations", []) or []
+    edges = [("right", "r", 0.95, 1.0, "x"), ("left", "l", 0.0, 0.05, "x"),
+             ("top", "t", 0.95, 1.0, "y"), ("bottom", "b", 0.0, 0.05, "y")]
+    for side, mkey, lo, hi, anchor_axis in edges:
+        m = margin.get(mkey)
+        if m is None or m >= 20:
+            continue
+        near = [a for a in anns if _is_num(a.get(anchor_axis)) and lo <= a[anchor_axis] <= hi]
+        if near:
+            out.append(Finding(f"margin_{side}_edge", "info",
+                f"margin.{mkey}={m} but {len(near)} annotation(s) sit at the {side} edge (paper {lo}-{hi}) — may be clipped",
+                f"fig.update_layout(margin=dict({mkey}=40)) to reserve space for edge content",
+                DOC + "setting-graph-size/"))
+    return out
+
+
 _CHECKS = [_check_empty_traces, _check_duplicate_names,
            _check_cliponaxis_text, _check_hover_disabled,
            _check_legend_off_canvas, _check_colorway_short,
-           _check_log_axis_nonpositive, _check_axis_range_excludes_data]
+           _check_log_axis_nonpositive, _check_axis_range_excludes_data,
+           _check_margin_vs_edge_content]
