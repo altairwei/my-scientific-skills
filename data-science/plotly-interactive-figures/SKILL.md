@@ -1,12 +1,11 @@
 ---
 name: plotly-interactive-figures
 description: Make, verify, and debug Plotly interactive figures when you (the agent)
-  have no visual capability — diagnose plotting problems through the figure's JSON
-  spec (to_dict/to_json, full_figure_for_development) instead of seeing the render.
-  Deliver a Jupyter notebook (.ipynb) organizing multiple figures with markdown
-  commentary. Use for interactive plotly/plotly-express charts, hover/zoom, or when a
-  Plotly figure "looks wrong" and you can't see it. Route matplotlib/publication
-  figures to figure-style.
+  have no visual capability — diagnose problems through the figure's JSON spec
+  (to_dict/to_json, full_figure_for_development) instead of seeing the render. Deliver
+  a .ipynb notebook of figures + markdown commentary. Triggers on interactive
+  plotly/plotly-express charts, hover/zoom, or "this plotly looks wrong". Route
+  matplotlib/publication figures to figure-style.
 license: MIT
 metadata:
   author: Altair Wei

@@ -74,15 +74,14 @@ Add `./data-science/plotly-interactive-figures` to the `data-science` plugin's `
 
 ```yaml
 description: Make, verify, and debug Plotly interactive figures when you (the agent)
-  have no visual capability — diagnose plotting problems through the figure's JSON
-  spec (to_dict/to_json, full_figure_for_development) instead of seeing the render.
-  Deliver a Jupyter notebook (.ipynb) organizing multiple figures with markdown
-  commentary. Use for interactive plotly/plotly-express charts, hover/zoom, or when a
-  Plotly figure "looks wrong" and you can't see it. Route matplotlib/publication
-  figures to figure-style.
+  have no visual capability — diagnose problems through the figure's JSON spec
+  (to_dict/to_json, full_figure_for_development) instead of seeing the render. Deliver
+  a .ipynb notebook of figures + markdown commentary. Triggers on interactive
+  plotly/plotly-express charts, hover/zoom, or "this plotly looks wrong". Route
+  matplotlib/publication figures to figure-style.
 ```
 
-~95 tokens. Includes "no visual capability" as a triggering context (this skill is **for** vision-less LLMs — the user's explicit ask) and the "looks wrong" symptom trigger; routes matplotlib → `figure-style`.
+~70 tokens (trimmed from ~95 during implementation to stay under the ~100-token guideline; verified with count-skill-tokens.py). Includes "no visual capability" as a triggering context (this skill is **for** vision-less LLMs — the user's explicit ask) and the "looks wrong" symptom trigger; routes matplotlib → `figure-style`.
 
 ## The audit module (`scripts/plotly_audit.py`)
 

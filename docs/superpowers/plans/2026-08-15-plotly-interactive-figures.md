@@ -848,12 +848,11 @@ git commit -m "feat(plotly-interactive-figures): margin-vs-edge-content check + 
 ---
 name: plotly-interactive-figures
 description: Make, verify, and debug Plotly interactive figures when you (the agent)
-  have no visual capability — diagnose plotting problems through the figure's JSON
-  spec (to_dict/to_json, full_figure_for_development) instead of seeing the render.
-  Deliver a Jupyter notebook (.ipynb) organizing multiple figures with markdown
-  commentary. Use for interactive plotly/plotly-express charts, hover/zoom, or when a
-  Plotly figure "looks wrong" and you can't see it. Route matplotlib/publication
-  figures to figure-style.
+  have no visual capability — diagnose problems through the figure's JSON spec
+  (to_dict/to_json, full_figure_for_development) instead of seeing the render. Deliver
+  a .ipynb notebook of figures + markdown commentary. Triggers on interactive
+  plotly/plotly-express charts, hover/zoom, or "this plotly looks wrong". Route
+  matplotlib/publication figures to figure-style.
 license: MIT
 metadata:
   author: Altair Wei
@@ -896,8 +895,10 @@ Default to the skeleton. Escalate to Kaleido only for the residual. Full model +
    for f in pa.audit(fig):
        print(f"[{f.severity}] {f.id}: {f.message}\n  fix: {f.fix_hint}\n  ref: {f.doc_ref}")
    ```
-   Fix every `error`/`warn`. `pa.audit` needs no Kaleido — it reads the `to_dict()`
-   skeleton. `pa.audit(fig.to_dict())` also works on a pasted spec the user printed.
+   Fix every `error`; triage `warn`s — `cliponaxis_text` is advisory ("labels may
+   clip"), so only act when your labels actually approach an axis. `pa.audit` needs
+   no Kaleido — it reads the `to_dict()` skeleton. `pa.audit(fig.to_dict())` also
+   works on a pasted spec the user printed.
 4. **Deliver a notebook** (`.ipynb`) — assemble multiple figures + markdown commentary
    with `nbformat`, execute with `jupyter nbconvert --execute --to notebook --inplace`
    (headless; Plotly embeds interactive HTML), `Write` it locally. Pattern:
