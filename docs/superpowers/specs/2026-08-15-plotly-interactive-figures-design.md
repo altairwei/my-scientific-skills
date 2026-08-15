@@ -50,7 +50,7 @@ The skill's primary output to the user. The agent assembles (via `nbformat`) a n
 - is **executed to embed outputs** (`jupyter nbconvert --execute --to notebook --inplace` — headless; Plotly figures embed as interactive HTML with no display needed) so the user opens a notebook with the figures already rendered. The agent iterates and audits figures in-session via `interactive-repl` first; the final notebook is assembled with `nbformat` then executed with `nbconvert`.
 - is **written locally with `Write`** (the repo's no-upload convention — never published).
 
-Deliverable-time deps: `nbformat` + `nbconvert` (+ `jupyter` core) on top of `plotly`. The audit itself needs only `plotly` (+ optional `pandas` for `df`-based checks); Kaleido only on the documented escalation path.
+Deliverable-time deps: `nbformat` + `nbconvert` (+ `jupyter` core) on top of `plotly`. The audit itself needs only `plotly` (data is read from the `to_dict()` spec — no `pandas`/`df` needed); Kaleido only on the documented escalation path.
 
 ## Architecture
 
@@ -58,7 +58,7 @@ Deliverable-time deps: `nbformat` + `nbconvert` (+ `jupyter` core) on top of `pl
 data-science/plotly-interactive-figures/
 ├── SKILL.md                  # the protocol: prep(→EDA) → build(px-first) → audit → deliver(.ipynb) → diagnose; Kaleido escalation
 ├── scripts/
-│   └── plotly_audit.py       # import-only: audit(fig_or_spec, df=None) -> list[Finding]
+│   └── plotly_audit.py       # import-only: audit(fig_or_spec) -> list[Finding]
 └── references/
     ├── debugging-without-vision.md   # three-depth methodology + cliponaxis case + escalation ladder
     ├── symptom-prescription.md       # symptom → JSON checkpoint → fix code → official-doc URL
