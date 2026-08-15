@@ -87,7 +87,9 @@ color harmony, real overlap, contrast, or whether a title's rendered position co
 with a spine — those need Depth 2/3 or the user's eyes. When you deliver a figure,
 say out loud which class of problem you did *not* verify (e.g. "color clash not
 checkable without Kaleido — confirm visually or pull `write_image`→`Read`"). Never
-imply a figure is verified when a whole category of defect went unchecked.
+imply a figure is verified when a whole category of defect went unchecked. The audit also
+skips subplot axes (`x2`/`y2`) and container-relative legends (`xref='container'`) —
+check those manually or escalate.
 
 ## Sources
 
