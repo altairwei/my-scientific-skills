@@ -517,12 +517,15 @@ def _check_legend_off_canvas(spec: dict) -> list[Finding]:
     x = leg.get("x")
     xa = leg.get("xanchor", "left")
     if _is_num(x):
-        if x > 0.9 and xa in ("left", "auto"):
+        # Only the straddling zone flags: with xanchor="left" the legend extends
+        # rightward from x, so 0.9 < x < 1.0 means it hangs over the plot's right
+        # edge. x >= 1.0 (e.g. Plotly's default 1.02) sits wholly in the margin.
+        if 0.9 < x < 1.0 and xa in ("left", "auto"):
             out.append(Finding("legend_off_canvas", "warn",
                 f"legend.x={x} with xanchor={xa!r} sits at/over the right edge — may be clipped",
                 "fig.update_layout(legend=dict(x=1.05, xanchor='left')) to push it into the right margin",
                 DOC + "legend/"))
-        elif x < 0.05 and xa in ("right", "auto"):
+        elif 0 < x < 0.05 and xa in ("right", "auto"):
             out.append(Finding("legend_off_canvas", "warn",
                 f"legend.x={x} with xanchor={xa!r} sits at/over the left edge — may be clipped",
                 "fig.update_layout(legend=dict(x=-0.05, xanchor='right'))",
@@ -1360,6 +1363,8 @@ git commit -m "test(plotly-interactive-figures): full audit suite + size + regis
 **2b. `_to_spec` DataFrame guard (post-review fix):** `_to_spec` is dict-first and shape-checks `"data" in spec` on the duck-typed `to_dict()` output — `pandas.DataFrame` (which also has a `.to_dict()` whose output has no `"data"` key) is rejected with TypeError instead of silently auditing `{}`. Test: `test_audit_rejects_dataframe`. This false-clean hole was caught by the Task 1 code-quality review; keep the shape check whenever `_to_spec` is touched.
 
 **2c. `cliponaxis_text` trace-type gate (post-review fix):** the check only fires on the cliponaxis-capable scatter family (trace `type` in `scatter`/`scatterpolar`/`scatterternary`, or an explicit `cliponaxis` in the skeleton) — Scattergl/Scatter3d/Scattergeo/Scattermap reject the property, so flagging them was a false warn whose fix hint (`update_traces(cliponaxis=False, ...)`) raises ValueError on those types. Also `mode` is read via `tr.get("mode") or ""` (handles `"mode": null` in hand-crafted specs). Tests: explicit-`cliponaxis=True` flagged, `Scattergl`-with-text not flagged, `hoverinfo="x+y"` not flagged.
+
+**2d. `legend_off_canvas` bounded zones (implementer-caught plan bug):** the plan's original snippet used `x > 0.9` and `x < 0.05` (unbounded), which contradicts the plan's own negative test (`legend.x=1.05` must NOT be flagged) and would self-flag the check's fix-hint states. The implemented check bounds the danger zones to `0.9 < x < 1.0` and `0 < x < 0.05` — the straddling zone where the legend (extending rightward from `x` with `xanchor='left'`) hangs over the plot edge; `x >= 1.0` (e.g. Plotly's default `1.02`) sits wholly in the margin.
 
 **3. Placeholder scan:** No "TBD"/"implement later"/"add error handling". Every code step shows complete code. Task 12 Step 4 (trigger test) is a concrete manual step per repo convention, not a placeholder. All reference content is complete (no "fill in the rest"). ✓
 
