@@ -226,3 +226,37 @@ def test_small_right_margin_with_edge_annotation_flagged():
 def test_default_margin_not_flagged():
     fig = go.Figure(go.Scatter(x=[1, 2], y=[1, 2]))
     assert not any(i.startswith("margin_") for i in _ids(pa.audit(fig)))
+
+
+def test_data_coord_annotation_not_flagged():
+    # add_annotation defaults to data coords (xref="x") — must not false-flag.
+    # Probe: plotly.py omits xref/yref from the to_dict skeleton for a default
+    # add_annotation (to_dict -> {'text','x','y'} only), and real plotly.js
+    # computes xref='x' for the absent key (verified via
+    # full_figure_for_development + kaleido). The audit's paper gate therefore
+    # treats an absent ref key as data coords, not paper.
+    fig = go.Figure(go.Scatter(x=[0, 50], y=[0, 50]))
+    fig.update_layout(margin=dict(r=10))
+    fig.add_annotation(x=0.98, y=0.5, text="note")
+    assert not any(i.startswith("margin_") for i in _ids(pa.audit(fig)))
+
+
+def test_paper_annotation_flagged():
+    fig = go.Figure(go.Scatter(x=[1, 2], y=[1, 2]))
+    fig.update_layout(margin=dict(r=10),
+                      annotations=[dict(text="note", x=0.98, y=0.5, xref="paper", yref="paper")])
+    assert any(i.startswith("margin_") for i in _ids(pa.audit(fig)))
+
+
+def test_left_band_flagged():
+    fig = go.Figure(go.Scatter(x=[1, 2], y=[1, 2]))
+    fig.update_layout(margin=dict(l=10),
+                      annotations=[dict(text="note", x=0.02, y=0.5, xref="paper", yref="paper")])
+    assert "margin_left_edge" in _ids(pa.audit(fig))
+
+
+def test_margin_threshold_20_not_flagged():
+    fig = go.Figure(go.Scatter(x=[1, 2], y=[1, 2]))
+    fig.update_layout(margin=dict(r=20),
+                      annotations=[dict(text="note", x=0.98, y=0.5, xref="paper", yref="paper")])
+    assert not any(i.startswith("margin_") for i in _ids(pa.audit(fig)))

@@ -290,13 +290,22 @@ def _check_margin_vs_edge_content(spec: dict) -> list[Finding]:
     layout = _layout(spec)
     margin = layout.get("margin", {}) or {}
     anns = layout.get("annotations", []) or []
-    edges = [("right", "r", 0.95, 1.0, "x"), ("left", "l", 0.0, 0.05, "x"),
-             ("top", "t", 0.95, 1.0, "y"), ("bottom", "b", 0.0, 0.05, "y")]
-    for side, mkey, lo, hi, anchor_axis in edges:
+    edges = [("right", "r", 0.95, 1.0, "x", "xref"), ("left", "l", 0.0, 0.05, "x", "xref"),
+             ("top", "t", 0.95, 1.0, "y", "yref"), ("bottom", "b", 0.0, 0.05, "y", "yref")]
+    for side, mkey, lo, hi, anchor_axis, ref_key in edges:
         m = margin.get(mkey)
         if m is None or m >= 20:
             continue
-        near = [a for a in anns if _is_num(a.get(anchor_axis)) and lo <= a[anchor_axis] <= hi]
+        # Gate on the reference system: only *explicitly* paper annotations are
+        # edge-evaluable from the skeleton. An absent xref/yref means data coords
+        # (plotly.py omits the key; real plotly.js computes xref='x' — verified
+        # via full_figure_for_development), and a data-coord annotation can't be
+        # judged against the paper band here — flagging one is the false positive
+        # this gate exists to prevent. Subplot-paper refs ("x2 domain") fall
+        # through the gate too (documented v1 limitation).
+        near = [a for a in anns
+                if _is_num(a.get(anchor_axis)) and lo <= a[anchor_axis] <= hi
+                and a.get(ref_key) == "paper"]
         if near:
             out.append(Finding(f"margin_{side}_edge", "info",
                 f"margin.{mkey}={m} but {len(near)} annotation(s) sit at the {side} edge (paper {lo}-{hi}) — may be clipped",
