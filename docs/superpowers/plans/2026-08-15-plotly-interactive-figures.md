@@ -778,13 +778,19 @@ def _check_margin_vs_edge_content(spec: dict) -> list[Finding]:
     layout = _layout(spec)
     margin = layout.get("margin", {}) or {}
     anns = layout.get("annotations", []) or []
-    edges = [("right", "r", 0.95, 1.0, "x"), ("left", "l", 0.0, 0.05, "x"),
-             ("top", "t", 0.95, 1.0, "y"), ("bottom", "b", 0.0, 0.05, "y")]
-    for side, mkey, lo, hi, anchor_axis in edges:
+    edges = [("right", "r", 0.95, 1.0, "x", "xref"), ("left", "l", 0.0, 0.05, "x", "xref"),
+             ("top", "t", 0.95, 1.0, "y", "yref"), ("bottom", "b", 0.0, 0.05, "y", "yref")]
+    for side, mkey, lo, hi, anchor_axis, ref_key in edges:
         m = margin.get(mkey)
         if m is None or m >= 20:
             continue
-        near = [a for a in anns if _is_num(a.get(anchor_axis)) and lo <= a[anchor_axis] <= hi]
+        # paper-reference only: annotations default to DATA coords (plain
+        # add_annotation leaves xref absent; full_figure_for_development shows the
+        # effective default is "x") — only an explicitly-paper annotation is
+        # edge-judgeable from the skeleton.
+        near = [a for a in anns
+                if _is_num(a.get(anchor_axis)) and lo <= a[anchor_axis] <= hi
+                and a.get(ref_key) == "paper"]
         if near:
             out.append(Finding(f"margin_{side}_edge", "info",
                 f"margin.{mkey}={m} but {len(near)} annotation(s) sit at the {side} edge (paper {lo}-{hi}) — may be clipped",
@@ -806,7 +812,7 @@ to:
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `uv run --with plotly --with pandas --with pytest python -m pytest data-science/plotly-interactive-figures/tests/ -v`
-Expected: all PASS (31 total: 29 + 2).
+Expected: all PASS (35 total: 31 + 4 regression tests from the post-review xref filter).
 
 - [ ] **Step 5: Verify a clean `px` figure audits clean (real-API smoke)**
 
@@ -1350,7 +1356,7 @@ git commit -m "docs(plotly-interactive-figures): nbformat assembly + nbconvert e
 - [ ] **Step 1: Run the full suite**
 
 Run: `uv run --with plotly --with pandas --with pytest python -m pytest data-science/plotly-interactive-figures/tests/ -v`
-Expected: all PASS (31 tests: 6 entrypoint + 5 empty/dup + 6 cliponaxis/hover + 4 legend/colorway + 8 log/range + 2 margin).
+Expected: all PASS (35 tests: 6 entrypoint + 5 empty/dup + 6 cliponaxis/hover + 4 legend/colorway + 8 log/range + 6 margin).
 
 - [ ] **Step 2: Size check**
 
@@ -1401,6 +1407,8 @@ git commit -m "test(plotly-interactive-figures): full audit suite + size + regis
 **2d. `legend_off_canvas` bounded zones (implementer-caught plan bug):** the plan's original snippet used `x > 0.9` and `x < 0.05` (unbounded), which contradicts the plan's own negative test (`legend.x=1.05` must NOT be flagged) and would self-flag the check's fix-hint states. The implemented check bounds the danger zones to `0.9 < x < 1.0` and `0 < x < 0.05` — the straddling zone where the legend (extending rightward from `x` with `xanchor='left'`) hangs over the plot edge; `x >= 1.0` (e.g. Plotly's default `1.02`) sits wholly in the margin.
 
 **2e. Typed-array decode + axis-binding filter (post-review fix, Task 5):** plotly 6.x serializes numpy-backed arrays in `to_dict()` as typed-array dicts `{"dtype","bdata"}` (verified with the skill's own test env: plotly 6.9.0), so `isinstance(v, (list, tuple))` gates silently skipped px-from-DataFrame data — the log-axis and axis-range checks were dead code on the primary path. `_decode_values` normalizes those dicts stdlib-only (base64 + `array` per `_DTYPE_SPEC`, float64 fallback), used by `_axis_vals` (which also filters traces to those bound to the inspected axis — x2/y2-bound traces no longer false-flag against `xaxis`/`yaxis`; subplot axes themselves remain a documented v1 limitation) and by `_check_empty_traces` (empty numpy traces now flagged). Regression tests: px-DataFrame `range_x` exclusion, px-DataFrame `log_y` zero, reversed-range original-order message, x2-binding no-false-positive, numpy-empty trace.
+
+**2f. Margin check annotation `xref`/`yref` filter (post-review fix, Task 6):** the `near` filter requires an explicit paper reference (`a.get(ref_key) == "paper"` with the band table carrying the ref key). Evidence: plain `add_annotation` leaves `xref`/`yref` absent from the skeleton, and `full_figure_for_development()` (kaleido) shows the effective default is data coords (`'x'`) — so an absent key means data coords and is not edge-judgeable from the skeleton; only explicitly-paper annotations are flagged. A data-coord annotation whose value lands in 0.95–1.0 is inside the plot, not at the edge, and was falsely flagged with a fix hint pointing at the wrong margin. Subplot-paper references (`xref="x2 domain"`) remain a documented v1 limitation. Regression tests: data-coord annotation not flagged, paper annotation flagged, left band flagged, `margin.r=20` threshold boundary not flagged.
 
 **3. Placeholder scan:** No "TBD"/"implement later"/"add error handling". Every code step shows complete code. Task 12 Step 4 (trigger test) is a concrete manual step per repo convention, not a placeholder. All reference content is complete (no "fill in the rest"). ✓
 
