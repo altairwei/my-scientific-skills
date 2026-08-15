@@ -1340,7 +1340,7 @@ nb.cells = [
     new_code_cell('import plotly.express as px; px.scatter(px.data.tips(), x=\"total_bill\", y=\"tip\").show()'),
 ]
 nbf.write(nb, '/tmp/pif_nbtest.ipynb')
-" && uv run --with plotly --with pandas --with nbconvert --with ipykernel jupyter nbconvert --to notebook --execute --inplace /tmp/pif_nbtest.ipynb && python -c "
+" && uv run --with plotly --with pandas --with nbconvert --with ipykernel jupyter nbconvert --to notebook --execute --inplace /tmp/pif_nbtest.ipynb && uv run --with nbformat python -c "
 import nbformat
 nb = nbformat.read('/tmp/pif_nbtest.ipynb', as_version=4)
 out = nb.cells[1].get('outputs', [])
