@@ -89,5 +89,37 @@ def _is_num(v) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
-# Checks are appended in later tasks; start empty so audit() is a no-op here.
-_CHECKS: list = []
+def _check_empty_traces(spec: dict) -> list[Finding]:
+    out = []
+    for i, tr in enumerate(_traces(spec)):
+        for axis in ("x", "y", "z", "values", "labels"):
+            v = tr.get(axis)
+            if v is None:
+                continue
+            if hasattr(v, "__len__") and len(v) == 0:
+                out.append(Finding("empty_trace", "error",
+                    f"trace[{i}] ({tr.get('type', 'scatter')}) has empty '{axis}'",
+                    f"fig.data[{i}].{axis} is empty — drop the trace or supply data",
+                    DOC + "figure-structure/"))
+                break
+    return out
+
+
+def _check_duplicate_names(spec: dict) -> list[Finding]:
+    out = []
+    seen: dict = {}
+    for i, tr in enumerate(_traces(spec)):
+        n = tr.get("name")
+        if not n:
+            continue
+        if n in seen:
+            out.append(Finding("duplicate_trace_name", "warn",
+                f"trace[{i}] reuses name {n!r} (also trace[{seen[n]}]) — legend/hover binding is ambiguous",
+                "give each trace a unique name, or use legendgroup",
+                DOC + "legend/"))
+        else:
+            seen[n] = i
+    return out
+
+
+_CHECKS = [_check_empty_traces, _check_duplicate_names]

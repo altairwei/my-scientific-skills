@@ -52,3 +52,31 @@ def test_clean_scatter_has_no_errors():
     fig = go.Figure(go.Scatter(x=[1, 2, 3], y=[1, 2, 3], name="s1"))
     errs = [f for f in pa.audit(fig) if f.severity == "error"]
     assert errs == []
+
+
+# ── empty traces ───────────────────────────────────────────────────────────────
+
+def test_empty_trace_flagged():
+    fig = go.Figure(go.Scatter(x=[], y=[]))
+    assert "empty_trace" in _ids(pa.audit(fig))
+
+
+def test_empty_trace_has_doc_ref():
+    fig = go.Figure(go.Scatter(x=[], y=[]))
+    f = [x for x in pa.audit(fig) if x.id == "empty_trace"][0]
+    assert f.severity == "error"
+    assert f.doc_ref == "https://plotly.com/python/figure-structure/"
+
+
+# ── duplicate trace names ──────────────────────────────────────────────────────
+
+def test_duplicate_names_flagged():
+    fig = go.Figure([go.Scatter(x=[1], y=[1], name="dup"),
+                     go.Scatter(x=[1], y=[2], name="dup")])
+    assert "duplicate_trace_name" in _ids(pa.audit(fig))
+
+
+def test_unique_names_not_flagged():
+    fig = go.Figure([go.Scatter(x=[1], y=[1], name="a"),
+                     go.Scatter(x=[1], y=[2], name="b")])
+    assert "duplicate_trace_name" not in _ids(pa.audit(fig))
