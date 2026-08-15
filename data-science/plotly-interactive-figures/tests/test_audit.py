@@ -173,3 +173,42 @@ def test_manual_range_excluding_data_flagged():
 def test_autorange_not_flagged():
     fig = go.Figure(go.Scatter(x=[1, 2, 3, 4], y=[1, 2, 3, 4]))
     assert "axis_range_excludes_data" not in _ids(pa.audit(fig))
+
+
+# ── typed-array (plotly 6.x numpy) + axis binding ─────────────────────────────
+
+def test_px_dataframe_manual_range_excluding_data_flagged():
+    import pandas as pd
+    import plotly.express as px
+    df = pd.DataFrame({"x": [1, 2, 3, 4], "y": [1, 2, 3, 4]})
+    fig = px.scatter(df, x="x", y="y")
+    fig.update_xaxes(range=[0, 3])   # x=4 outside; numpy-backed data in plotly 6.x
+    assert "axis_range_excludes_data" in _ids(pa.audit(fig))
+
+
+def test_px_dataframe_log_axis_zero_flagged():
+    import pandas as pd
+    import plotly.express as px
+    df = pd.DataFrame({"x": [1, 2, 3], "y": [1, 0, 4]})
+    fig = px.scatter(df, x="x", y="y", log_y=True)
+    assert "log_axis_nonpositive" in _ids(pa.audit(fig))
+
+
+def test_reversed_range_excluding_data_flagged():
+    fig = go.Figure(go.Scatter(x=[1, 2, 3, 5], y=[1, 2, 3, 5]))
+    fig.update_xaxes(range=[4, 1])
+    finds = [f for f in pa.audit(fig) if f.id == "axis_range_excludes_data"]
+    assert finds and "range=[4,1]" in finds[0].message   # original order shown
+
+
+def test_x2_bound_trace_not_falsely_flagged():
+    fig = go.Figure([go.Scatter(x=[1, 2], y=[1, 2]),
+                     go.Scatter(x=[100, 200], y=[1, 2], xaxis="x2")])
+    fig.update_xaxes(range=[0, 10])
+    assert "axis_range_excludes_data" not in _ids(pa.audit(fig))
+
+
+def test_numpy_empty_trace_flagged():
+    import numpy as np
+    fig = go.Figure(go.Scatter(x=np.array([]), y=np.array([])))
+    assert "empty_trace" in _ids(pa.audit(fig))

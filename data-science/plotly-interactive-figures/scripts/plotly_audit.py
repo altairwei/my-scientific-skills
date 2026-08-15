@@ -30,6 +30,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import array
+import base64
+
 DOC = "https://plotly.com/python/"
 
 
@@ -89,11 +92,39 @@ def _is_num(v) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
+_DTYPE_SPEC = {
+    "i1": "b", "u1": "B", "i2": "h", "u2": "H",
+    "i4": "i", "u4": "I", "i8": "q", "u8": "Q",
+    "f4": "f", "f8": "d",
+}
+
+
+def _decode_values(v: Any) -> Any:
+    """Normalize a to_dict() value. Plain list/tuple passes through; plotly 6.x
+    serializes numpy-backed arrays as typed-array dicts {"dtype","bdata"} —
+    decode them stdlib-only (base64 + array), preserving the no-plotly import."""
+    if isinstance(v, (list, tuple)):
+        return list(v)
+    if isinstance(v, dict) and "bdata" in v and "dtype" in v:
+        raw = base64.b64decode(v["bdata"])
+        code = _DTYPE_SPEC.get(v["dtype"])
+        if code is not None:
+            try:
+                return list(array.array(code, raw))
+            except (ValueError, OverflowError):
+                pass
+        try:
+            return list(array.array("d", raw))
+        except (ValueError, OverflowError):
+            return list(raw)
+    return v
+
+
 def _check_empty_traces(spec: dict) -> list[Finding]:
     out = []
     for i, tr in enumerate(_traces(spec)):
         for axis in ("x", "y", "z", "values", "labels"):
-            v = tr.get(axis)
+            v = _decode_values(tr.get(axis))
             if v is None:
                 continue
             if hasattr(v, "__len__") and len(v) == 0:
@@ -194,10 +225,15 @@ def _check_colorway_short(spec: dict) -> list[Finding]:
     return out
 
 
-def _axis_vals(spec: dict, trace_key: str) -> list:
+def _axis_vals(spec: dict, trace_key: str, axis_ref: str) -> list:
+    """Numeric values on `trace_key` from traces bound to axis `axis_ref`
+    ("x"/"y"). x2/y2-bound traces are excluded (subplot axes are a v1
+    limitation — see the plan)."""
     vals = []
     for tr in _traces(spec):
-        data = tr.get(trace_key)
+        if tr.get(f"{axis_ref}axis", axis_ref) != axis_ref:
+            continue
+        data = _decode_values(tr.get(trace_key))
         if isinstance(data, (list, tuple)):
             vals.extend(v for v in data if _is_num(v))
     return vals
@@ -206,11 +242,11 @@ def _axis_vals(spec: dict, trace_key: str) -> list:
 def _check_log_axis_nonpositive(spec: dict) -> list[Finding]:
     out = []
     layout = _layout(spec)
-    for axis_key, trace_key in (("xaxis", "x"), ("yaxis", "y")):
+    for axis_key, trace_key, axis_ref in (("xaxis", "x", "x"), ("yaxis", "y", "y")):
         ax = layout.get(axis_key)
         if not isinstance(ax, dict) or ax.get("type") != "log":
             continue
-        vals = _axis_vals(spec, trace_key)
+        vals = _axis_vals(spec, trace_key, axis_ref)
         nonpos = [v for v in vals if v <= 0]
         if nonpos:
             out.append(Finding("log_axis_nonpositive", "error",
@@ -223,7 +259,7 @@ def _check_log_axis_nonpositive(spec: dict) -> list[Finding]:
 def _check_axis_range_excludes_data(spec: dict) -> list[Finding]:
     out = []
     layout = _layout(spec)
-    for axis_key, trace_key in (("xaxis", "x"), ("yaxis", "y")):
+    for axis_key, trace_key, axis_ref in (("xaxis", "x", "x"), ("yaxis", "y", "y")):
         ax = layout.get(axis_key)
         if not isinstance(ax, dict):
             continue
@@ -233,7 +269,7 @@ def _check_axis_range_excludes_data(spec: dict) -> list[Finding]:
         lo, hi = rng
         if lo > hi:
             lo, hi = hi, lo              # autorange-reversed
-        vals = _axis_vals(spec, trace_key)
+        vals = _axis_vals(spec, trace_key, axis_ref)
         if not vals:
             continue
         outside = [v for v in vals if v < lo or v > hi]
