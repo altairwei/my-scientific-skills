@@ -102,6 +102,13 @@ def test_audit_rejects_garbage():
         pa.audit(42)
 
 
+def test_audit_rejects_dataframe():
+    import pandas as pd
+    df = pd.DataFrame({"x": [1, 2], "y": [3, 4]})
+    with pytest.raises(TypeError, match="to_dict"):
+        pa.audit(df)
+
+
 def test_finding_as_dict_roundtrip():
     f = pa.Finding("x", "warn", "msg", "fix", "https://plotly.com/python/legend/")
     assert f.as_dict() == {"id": "x", "severity": "warn", "message": "msg",
@@ -171,11 +178,17 @@ class Finding:
 
 
 def _to_spec(fig_or_spec: Any) -> dict:
-    """Accept a go.Figure / px figure (duck-typed .to_dict) or a parsed spec dict."""
-    if hasattr(fig_or_spec, "to_dict"):
-        return fig_or_spec.to_dict()
+    """Accept a go.Figure / px figure (duck-typed .to_dict) or a parsed spec dict.
+
+    Dict-first: pandas DataFrames also have a .to_dict() whose output has no
+    "data" key — reject them (shape-check) instead of silently auditing {}.
+    """
     if isinstance(fig_or_spec, dict):
         return fig_or_spec
+    if hasattr(fig_or_spec, "to_dict"):
+        spec = fig_or_spec.to_dict()
+        if isinstance(spec, dict) and "data" in spec:
+            return spec
     raise TypeError(
         f"audit() expects a Plotly Figure or a to_dict() dict, got {type(fig_or_spec).__name__}")
 
@@ -214,7 +227,7 @@ _CHECKS: list = []
 - [ ] **Step 6: Run tests to verify they pass**
 
 Run: `uv run --with plotly --with pandas --with pytest python -m pytest data-science/plotly-interactive-figures/tests/ -v`
-Expected: 5 passed. (`audit()` returns `[]` because `_CHECKS` is empty; the clean-scatter test therefore has no errors.)
+Expected: 6 passed. (`audit()` returns `[]` because `_CHECKS` is empty; the clean-scatter test therefore has no errors.)
 
 - [ ] **Step 7: Add `plotly-interactive-figures` to `marketplace.json`**
 
@@ -1295,7 +1308,7 @@ git commit -m "docs(plotly-interactive-figures): nbformat assembly + nbconvert e
 - [ ] **Step 1: Run the full suite**
 
 Run: `uv run --with plotly --with pandas --with pytest python -m pytest data-science/plotly-interactive-figures/tests/ -v`
-Expected: all PASS (22 tests: 5 entrypoint + 4 empty/dup + 3 cliponaxis/hover + 4 legend/colorway + 4 log/range + 2 margin).
+Expected: all PASS (23 tests: 6 entrypoint + 4 empty/dup + 3 cliponaxis/hover + 4 legend/colorway + 4 log/range + 2 margin).
 
 - [ ] **Step 2: Size check**
 
@@ -1338,6 +1351,8 @@ git commit -m "test(plotly-interactive-figures): full audit suite + size + regis
 - License/attribution (MIT; external/ plotly.py studied read-only, cite plotly.com URLs) → SKILL.md `license: MIT`; Conventions note in plan header; Task 8/9/10/11 cite plotly.com URLs.
 
 **2. Deviation from spec (flagged, justified):** the design spec's `audit(fig_or_spec, df=None)` is implemented as `audit(fig_or_spec)` — the `df` parameter is dropped because Plotly Express expands the dataframe into `data[].x`/`data[].y` arrays in the `to_dict()` spec, so the skeleton is self-contained (the audit reads data values straight from the spec, no external df needed). The log-axis-zero and axis-range-excludes-data checks read `trace['x']`/`trace['y']` from the spec. This is a justified simplification; if a future figure references data not embedded in the spec, add `df` back then (YAGNI now).
+
+**2b. `_to_spec` DataFrame guard (post-review fix):** `_to_spec` is dict-first and shape-checks `"data" in spec` on the duck-typed `to_dict()` output — `pandas.DataFrame` (which also has a `.to_dict()` whose output has no `"data"` key) is rejected with TypeError instead of silently auditing `{}`. Test: `test_audit_rejects_dataframe`. This false-clean hole was caught by the Task 1 code-quality review; keep the shape check whenever `_to_spec` is touched.
 
 **3. Placeholder scan:** No "TBD"/"implement later"/"add error handling". Every code step shows complete code. Task 12 Step 4 (trigger test) is a concrete manual step per repo convention, not a placeholder. All reference content is complete (no "fill in the rest"). ✓
 
