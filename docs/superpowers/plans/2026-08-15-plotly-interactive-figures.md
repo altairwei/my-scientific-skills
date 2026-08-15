@@ -402,11 +402,16 @@ Add to `scripts/plotly_audit.py`:
 ```python
 def _check_cliponaxis_text(spec: dict) -> list[Finding]:
     # cliponaxis defaults to True (per the official figure-introspection doc); text
-    # labels crossing an axis line are clipped when it's True.
+    # labels crossing an axis line are clipped when it's True. Only the scatter
+    # family has a cliponaxis property — Scattergl/Scatter3d/Scattergeo/Scattermap
+    # reject it (update_traces(cliponaxis=...) raises ValueError there).
     out = []
     for i, tr in enumerate(_traces(spec)):
-        mode = tr.get("mode", "")
+        mode = tr.get("mode") or ""
         if "text" not in mode:
+            continue
+        ttype = tr.get("type", "scatter")
+        if "cliponaxis" not in tr and ttype not in ("scatter", "scatterpolar", "scatterternary"):
             continue
         clip = tr.get("cliponaxis")
         if clip is None or clip is True:
@@ -442,7 +447,7 @@ _CHECKS = [_check_empty_traces, _check_duplicate_names,
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `uv run --with plotly --with pandas --with pytest python -m pytest data-science/plotly-interactive-figures/tests/ -v`
-Expected: all PASS (13 total).
+Expected: all PASS (16 total: 13 + 3 regression tests from the post-review trace-type gate).
 
 - [ ] **Step 5: Commit**
 
@@ -554,7 +559,7 @@ _CHECKS = [_check_empty_traces, _check_duplicate_names,
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `uv run --with plotly --with pandas --with pytest python -m pytest data-science/plotly-interactive-figures/tests/ -v`
-Expected: all PASS (17 total).
+Expected: all PASS (20 total).
 
 - [ ] **Step 5: Commit**
 
@@ -681,7 +686,7 @@ _CHECKS = [_check_empty_traces, _check_duplicate_names,
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `uv run --with plotly --with pandas --with pytest python -m pytest data-science/plotly-interactive-figures/tests/ -v`
-Expected: all PASS (21 total).
+Expected: all PASS (24 total).
 
 - [ ] **Step 5: Commit**
 
@@ -764,7 +769,7 @@ to:
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `uv run --with plotly --with pandas --with pytest python -m pytest data-science/plotly-interactive-figures/tests/ -v`
-Expected: all PASS (23 total).
+Expected: all PASS (26 total).
 
 - [ ] **Step 5: Verify a clean `px` figure audits clean (real-API smoke)**
 
@@ -1308,7 +1313,7 @@ git commit -m "docs(plotly-interactive-figures): nbformat assembly + nbconvert e
 - [ ] **Step 1: Run the full suite**
 
 Run: `uv run --with plotly --with pandas --with pytest python -m pytest data-science/plotly-interactive-figures/tests/ -v`
-Expected: all PASS (23 tests: 6 entrypoint + 4 empty/dup + 3 cliponaxis/hover + 4 legend/colorway + 4 log/range + 2 margin).
+Expected: all PASS (26 tests: 6 entrypoint + 4 empty/dup + 6 cliponaxis/hover + 4 legend/colorway + 4 log/range + 2 margin).
 
 - [ ] **Step 2: Size check**
 
@@ -1353,6 +1358,8 @@ git commit -m "test(plotly-interactive-figures): full audit suite + size + regis
 **2. Deviation from spec (flagged, justified):** the design spec's `audit(fig_or_spec, df=None)` is implemented as `audit(fig_or_spec)` — the `df` parameter is dropped because Plotly Express expands the dataframe into `data[].x`/`data[].y` arrays in the `to_dict()` spec, so the skeleton is self-contained (the audit reads data values straight from the spec, no external df needed). The log-axis-zero and axis-range-excludes-data checks read `trace['x']`/`trace['y']` from the spec. This is a justified simplification; if a future figure references data not embedded in the spec, add `df` back then (YAGNI now).
 
 **2b. `_to_spec` DataFrame guard (post-review fix):** `_to_spec` is dict-first and shape-checks `"data" in spec` on the duck-typed `to_dict()` output — `pandas.DataFrame` (which also has a `.to_dict()` whose output has no `"data"` key) is rejected with TypeError instead of silently auditing `{}`. Test: `test_audit_rejects_dataframe`. This false-clean hole was caught by the Task 1 code-quality review; keep the shape check whenever `_to_spec` is touched.
+
+**2c. `cliponaxis_text` trace-type gate (post-review fix):** the check only fires on the cliponaxis-capable scatter family (trace `type` in `scatter`/`scatterpolar`/`scatterternary`, or an explicit `cliponaxis` in the skeleton) — Scattergl/Scatter3d/Scattergeo/Scattermap reject the property, so flagging them was a false warn whose fix hint (`update_traces(cliponaxis=False, ...)`) raises ValueError on those types. Also `mode` is read via `tr.get("mode") or ""` (handles `"mode": null` in hand-crafted specs). Tests: explicit-`cliponaxis=True` flagged, `Scattergl`-with-text not flagged, `hoverinfo="x+y"` not flagged.
 
 **3. Placeholder scan:** No "TBD"/"implement later"/"add error handling". Every code step shows complete code. Task 12 Step 4 (trigger test) is a concrete manual step per repo convention, not a placeholder. All reference content is complete (no "fill in the rest"). ✓
 
