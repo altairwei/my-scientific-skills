@@ -156,5 +156,44 @@ def _check_hover_disabled(spec: dict) -> list[Finding]:
     return out
 
 
+def _check_legend_off_canvas(spec: dict) -> list[Finding]:
+    out = []
+    leg = _layout(spec).get("legend")
+    if not isinstance(leg, dict):
+        return out
+    x = leg.get("x")
+    xa = leg.get("xanchor", "left")
+    if _is_num(x):
+        # Only the straddling zone flags: with xanchor="left" the legend extends
+        # rightward from x, so 0.9 < x < 1.0 means it hangs over the plot's right
+        # edge. x >= 1.0 (e.g. Plotly's default 1.02) sits wholly in the margin.
+        if 0.9 < x < 1.0 and xa in ("left", "auto"):
+            out.append(Finding("legend_off_canvas", "warn",
+                f"legend.x={x} with xanchor={xa!r} sits at/over the right edge — may be clipped",
+                "fig.update_layout(legend=dict(x=1.05, xanchor='left')) to push it into the right margin",
+                DOC + "legend/"))
+        elif 0 < x < 0.05 and xa in ("right", "auto"):
+            out.append(Finding("legend_off_canvas", "warn",
+                f"legend.x={x} with xanchor={xa!r} sits at/over the left edge — may be clipped",
+                "fig.update_layout(legend=dict(x=-0.05, xanchor='right'))",
+                DOC + "legend/"))
+    return out
+
+
+def _check_colorway_short(spec: dict) -> list[Finding]:
+    out = []
+    cw = _layout(spec).get("colorway")
+    if not isinstance(cw, list) or not cw:
+        return out
+    n = len(_traces(spec))
+    if n > len(cw):
+        out.append(Finding("colorway_shorter_than_traces", "warn",
+            f"layout.colorway has {len(cw)} colors for {n} traces — colors repeat; series may be hard to tell apart",
+            "extend colorway, or remove it to use Plotly's default cycle",
+            DOC + "discrete-color/"))
+    return out
+
+
 _CHECKS = [_check_empty_traces, _check_duplicate_names,
-           _check_cliponaxis_text, _check_hover_disabled]
+           _check_cliponaxis_text, _check_hover_disabled,
+           _check_legend_off_canvas, _check_colorway_short]

@@ -116,3 +116,33 @@ def test_hoverinfo_limited_not_flagged():
 def test_hoverinfo_none_flagged():
     fig = go.Figure(go.Scatter(x=[1], y=[1], hoverinfo="none"))
     assert "hover_disabled" in _ids(pa.audit(fig))
+
+
+# ── legend off canvas ──────────────────────────────────────────────────────────
+
+def test_legend_off_right_edge_flagged():
+    fig = go.Figure(go.Scatter(x=[1, 2], y=[1, 2]))
+    fig.update_layout(legend=dict(x=0.95, xanchor="left"))
+    assert "legend_off_canvas" in _ids(pa.audit(fig))
+
+
+def test_legend_pushed_into_margin_ok():
+    fig = go.Figure(go.Scatter(x=[1, 2], y=[1, 2]))
+    fig.update_layout(legend=dict(x=1.05, xanchor="left"))
+    assert "legend_off_canvas" not in _ids(pa.audit(fig))
+
+
+# ── colorway shorter than traces ───────────────────────────────────────────────
+
+def test_colorway_shorter_than_traces_flagged():
+    fig = go.Figure([go.Scatter(x=[1], y=[1], name="a"),
+                     go.Scatter(x=[1], y=[2], name="b"),
+                     go.Scatter(x=[1], y=[3], name="c")])
+    fig.update_layout(colorway=["red", "blue"])   # 2 colors, 3 traces
+    assert "colorway_shorter_than_traces" in _ids(pa.audit(fig))
+
+
+def test_no_colorway_not_flagged():
+    fig = go.Figure([go.Scatter(x=[1], y=[1], name="a"),
+                     go.Scatter(x=[1], y=[2], name="b")])
+    assert "colorway_shorter_than_traces" not in _ids(pa.audit(fig))
