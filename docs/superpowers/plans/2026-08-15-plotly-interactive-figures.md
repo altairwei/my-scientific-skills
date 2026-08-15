@@ -621,10 +621,44 @@ Expected: FAIL.
 Add to `scripts/plotly_audit.py`:
 
 ```python
-def _axis_vals(spec: dict, trace_key: str) -> list:
+# (add `import array` and `import base64` to the module's top import block)
+_DTYPE_SPEC = {
+    "i1": "b", "u1": "B", "i2": "h", "u2": "H",
+    "i4": "i", "u4": "I", "i8": "q", "u8": "Q",
+    "f4": "f", "f8": "d",
+}
+
+
+def _decode_values(v: Any) -> Any:
+    """Normalize a to_dict() value. Plain list/tuple passes through; plotly 6.x
+    serializes numpy-backed arrays as typed-array dicts {"dtype","bdata"} —
+    decode them stdlib-only (base64 + array), preserving the no-plotly import."""
+    if isinstance(v, (list, tuple)):
+        return list(v)
+    if isinstance(v, dict) and "bdata" in v and "dtype" in v:
+        raw = base64.b64decode(v["bdata"])
+        code = _DTYPE_SPEC.get(v["dtype"])
+        if code is not None:
+            try:
+                return list(array.array(code, raw))
+            except (ValueError, OverflowError):
+                pass
+        try:
+            return list(array.array("d", raw))
+        except (ValueError, OverflowError):
+            return list(raw)
+    return v
+
+
+def _axis_vals(spec: dict, trace_key: str, axis_ref: str) -> list:
+    """Numeric values on `trace_key` from traces bound to axis `axis_ref`
+    ("x"/"y"). x2/y2-bound traces are excluded (subplot axes are a v1
+    limitation — see the plan)."""
     vals = []
     for tr in _traces(spec):
-        data = tr.get(trace_key)
+        if tr.get(f"{axis_ref}axis", axis_ref) != axis_ref:
+            continue
+        data = _decode_values(tr.get(trace_key))
         if isinstance(data, (list, tuple)):
             vals.extend(v for v in data if _is_num(v))
     return vals
@@ -633,11 +667,11 @@ def _axis_vals(spec: dict, trace_key: str) -> list:
 def _check_log_axis_nonpositive(spec: dict) -> list[Finding]:
     out = []
     layout = _layout(spec)
-    for axis_key, trace_key in (("xaxis", "x"), ("yaxis", "y")):
+    for axis_key, trace_key, axis_ref in (("xaxis", "x", "x"), ("yaxis", "y", "y")):
         ax = layout.get(axis_key)
         if not isinstance(ax, dict) or ax.get("type") != "log":
             continue
-        vals = _axis_vals(spec, trace_key)
+        vals = _axis_vals(spec, trace_key, axis_ref)
         nonpos = [v for v in vals if v <= 0]
         if nonpos:
             out.append(Finding("log_axis_nonpositive", "error",
@@ -650,7 +684,7 @@ def _check_log_axis_nonpositive(spec: dict) -> list[Finding]:
 def _check_axis_range_excludes_data(spec: dict) -> list[Finding]:
     out = []
     layout = _layout(spec)
-    for axis_key, trace_key in (("xaxis", "x"), ("yaxis", "y")):
+    for axis_key, trace_key, axis_ref in (("xaxis", "x", "x"), ("yaxis", "y", "y")):
         ax = layout.get(axis_key)
         if not isinstance(ax, dict):
             continue
@@ -660,7 +694,7 @@ def _check_axis_range_excludes_data(spec: dict) -> list[Finding]:
         lo, hi = rng
         if lo > hi:
             lo, hi = hi, lo              # autorange-reversed
-        vals = _axis_vals(spec, trace_key)
+        vals = _axis_vals(spec, trace_key, axis_ref)
         if not vals:
             continue
         outside = [v for v in vals if v < lo or v > hi]
@@ -689,7 +723,7 @@ _CHECKS = [_check_empty_traces, _check_duplicate_names,
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `uv run --with plotly --with pandas --with pytest python -m pytest data-science/plotly-interactive-figures/tests/ -v`
-Expected: all PASS (24 total).
+Expected: all PASS (29 total: 24 + 5 regression tests from the post-review typed-array fix).
 
 - [ ] **Step 5: Commit**
 
@@ -772,7 +806,7 @@ to:
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `uv run --with plotly --with pandas --with pytest python -m pytest data-science/plotly-interactive-figures/tests/ -v`
-Expected: all PASS (26 total).
+Expected: all PASS (31 total: 29 + 2).
 
 - [ ] **Step 5: Verify a clean `px` figure audits clean (real-API smoke)**
 
@@ -1316,7 +1350,7 @@ git commit -m "docs(plotly-interactive-figures): nbformat assembly + nbconvert e
 - [ ] **Step 1: Run the full suite**
 
 Run: `uv run --with plotly --with pandas --with pytest python -m pytest data-science/plotly-interactive-figures/tests/ -v`
-Expected: all PASS (26 tests: 6 entrypoint + 4 empty/dup + 6 cliponaxis/hover + 4 legend/colorway + 4 log/range + 2 margin).
+Expected: all PASS (31 tests: 6 entrypoint + 5 empty/dup + 6 cliponaxis/hover + 4 legend/colorway + 8 log/range + 2 margin).
 
 - [ ] **Step 2: Size check**
 
@@ -1365,6 +1399,8 @@ git commit -m "test(plotly-interactive-figures): full audit suite + size + regis
 **2c. `cliponaxis_text` trace-type gate (post-review fix):** the check only fires on the cliponaxis-capable scatter family (trace `type` in `scatter`/`scatterpolar`/`scatterternary`, or an explicit `cliponaxis` in the skeleton) — Scattergl/Scatter3d/Scattergeo/Scattermap reject the property, so flagging them was a false warn whose fix hint (`update_traces(cliponaxis=False, ...)`) raises ValueError on those types. Also `mode` is read via `tr.get("mode") or ""` (handles `"mode": null` in hand-crafted specs). Tests: explicit-`cliponaxis=True` flagged, `Scattergl`-with-text not flagged, `hoverinfo="x+y"` not flagged.
 
 **2d. `legend_off_canvas` bounded zones (implementer-caught plan bug):** the plan's original snippet used `x > 0.9` and `x < 0.05` (unbounded), which contradicts the plan's own negative test (`legend.x=1.05` must NOT be flagged) and would self-flag the check's fix-hint states. The implemented check bounds the danger zones to `0.9 < x < 1.0` and `0 < x < 0.05` — the straddling zone where the legend (extending rightward from `x` with `xanchor='left'`) hangs over the plot edge; `x >= 1.0` (e.g. Plotly's default `1.02`) sits wholly in the margin.
+
+**2e. Typed-array decode + axis-binding filter (post-review fix, Task 5):** plotly 6.x serializes numpy-backed arrays in `to_dict()` as typed-array dicts `{"dtype","bdata"}` (verified with the skill's own test env: plotly 6.9.0), so `isinstance(v, (list, tuple))` gates silently skipped px-from-DataFrame data — the log-axis and axis-range checks were dead code on the primary path. `_decode_values` normalizes those dicts stdlib-only (base64 + `array` per `_DTYPE_SPEC`, float64 fallback), used by `_axis_vals` (which also filters traces to those bound to the inspected axis — x2/y2-bound traces no longer false-flag against `xaxis`/`yaxis`; subplot axes themselves remain a documented v1 limitation) and by `_check_empty_traces` (empty numpy traces now flagged). Regression tests: px-DataFrame `range_x` exclusion, px-DataFrame `log_y` zero, reversed-range original-order message, x2-binding no-false-positive, numpy-empty trace.
 
 **3. Placeholder scan:** No "TBD"/"implement later"/"add error handling". Every code step shows complete code. Task 12 Step 4 (trigger test) is a concrete manual step per repo convention, not a placeholder. All reference content is complete (no "fill in the rest"). ✓
 
