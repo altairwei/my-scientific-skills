@@ -14,12 +14,17 @@ import sys
 sys.path.insert(0, "<plugin>/data-science/plotly-interactive-figures/scripts")
 import plotly_audit as pa
 
-# small inline dataset — no network/data dep
+# replace <plugin> with this repo's root, e.g. ~/src/my-scientific-skills
+
+# small inline dataset — no network/data dep; 8 rows per category so
+# box/violin quartiles are meaningful
 df = pd.DataFrame({
-    "category": list("aabbcc"),
-    "price":    [10, 12, 20, 22, 30, 33],
-    "sales":    [5, 8, 6, 9, 4, 7],
-    "region":   ["N","N","S","S","E","E"],
+    "category": [c for c in "abc" for _ in range(8)],
+    "price":    [10, 12, 14, 16, 18, 20, 22, 24,
+                 30, 33, 36, 39, 42, 45, 48, 51,
+                 60, 63, 66, 69, 72, 75, 78, 81],
+    "sales":    [5, 8, 6, 9, 4, 7, 5, 6, 4, 3, 5, 7, 6, 4, 5, 8, 3, 6, 4, 7, 5, 6, 4, 8],
+    "region":   ["N", "S", "E", "W"] * 6,
 })
 ```
 
@@ -54,7 +59,7 @@ fig.show()
 
 ```python
 fig = px.histogram(df, x="price", color="category", barmode="overlay",
-                   title="price distribution")
+                   opacity=0.5, title="price distribution")
 assert pa.audit(fig) == []
 fig.show()
 ```
@@ -80,7 +85,7 @@ fig.show()
 
 ```python
 import numpy as np
-m = np.array([[1,2,3],[4,5,6],[7,8,9]])
+m = np.array([[1.0, 0.8, -0.4], [0.8, 1.0, 0.2], [-0.4, 0.2, 1.0]])  # a real correlation matrix
 fig = px.imshow(m, title="correlation matrix",
                 labels=dict(x="var", y="var", color="value"))
 assert pa.audit(fig) == []
@@ -89,6 +94,9 @@ fig.show()
 
 ## When `px` isn't enough
 
-`graph_objects` is the escape hatch (subplots, mixed trace types, `FigureWidget`).
-Audit still applies — `pa.audit(fig)` works on any `go.Figure`. Prefer `px` until you
-hit a concrete wall; document the wall in the notebook's markdown when you descend.
+`graph_objects` is the escape hatch (subplots, mixed trace types, `FigureWidget`, or
+a categorical-x matrix `go.Heatmap` that `px.imshow` can't express). Audit still
+applies — `pa.audit(fig)` works on any `go.Figure`. Prefer `px` until you hit a
+concrete wall; document the wall in the notebook's markdown when you descend. If a
+pattern's `assert pa.audit(fig) == []` ever trips, print the findings — each carries
+a fix hint and a doc link (SKILL.md step 3).
