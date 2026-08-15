@@ -44,6 +44,7 @@ Default to the skeleton. Escalate to Kaleido only for the residual. Full model +
 3. **Audit** (primary channel) —
    ```python
    import sys; sys.path.insert(0, "<plugin>/data-science/plotly-interactive-figures/scripts")
+   # <plugin> = this repo's root, e.g. ~/src/my-scientific-skills
    import plotly_audit as pa
    for f in pa.audit(fig):
        print(f"[{f.severity}] {f.id}: {f.message}\n  fix: {f.fix_hint}\n  ref: {f.doc_ref}")
