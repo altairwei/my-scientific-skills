@@ -258,7 +258,7 @@ git commit -m "feat(plotly-interactive-figures): scaffold + audit skeleton + mar
 
 **Files:**
 - Modify: `data-science/plotly-interactive-figures/scripts/plotly_audit.py` (add 2 checks, register in `_CHECKS`)
-- Modify: `data-science/plotly-interactive-figures/tests/test_audit.py` (add 2 tests)
+- Modify: `data-science/plotly-interactive-figures/tests/test_audit.py` (add 4 tests)
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -348,7 +348,7 @@ _CHECKS = [_check_empty_traces, _check_duplicate_names]
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `uv run --with plotly --with pandas --with pytest python -m pytest data-science/plotly-interactive-figures/tests/ -v`
-Expected: all tests PASS (5 entrypoint + 4 new = 9).
+Expected: all tests PASS (6 entrypoint + 4 new = 10).
 
 - [ ] **Step 5: Commit**
 
@@ -442,7 +442,7 @@ _CHECKS = [_check_empty_traces, _check_duplicate_names,
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `uv run --with plotly --with pandas --with pytest python -m pytest data-science/plotly-interactive-figures/tests/ -v`
-Expected: all PASS (12 total).
+Expected: all PASS (13 total).
 
 - [ ] **Step 5: Commit**
 
@@ -554,7 +554,7 @@ _CHECKS = [_check_empty_traces, _check_duplicate_names,
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `uv run --with plotly --with pandas --with pytest python -m pytest data-science/plotly-interactive-figures/tests/ -v`
-Expected: all PASS (16 total).
+Expected: all PASS (17 total).
 
 - [ ] **Step 5: Commit**
 
@@ -681,7 +681,7 @@ _CHECKS = [_check_empty_traces, _check_duplicate_names,
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `uv run --with plotly --with pandas --with pytest python -m pytest data-science/plotly-interactive-figures/tests/ -v`
-Expected: all PASS (20 total).
+Expected: all PASS (21 total).
 
 - [ ] **Step 5: Commit**
 
@@ -764,7 +764,7 @@ to:
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `uv run --with plotly --with pandas --with pytest python -m pytest data-science/plotly-interactive-figures/tests/ -v`
-Expected: all PASS (22 total).
+Expected: all PASS (23 total).
 
 - [ ] **Step 5: Verify a clean `px` figure audits clean (real-API smoke)**
 
