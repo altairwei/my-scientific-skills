@@ -95,6 +95,22 @@ def test_cliponaxis_false_not_flagged():
     assert "cliponaxis_text" not in _ids(pa.audit(fig))
 
 
+def test_explicit_cliponaxis_true_flagged():
+    fig = go.Figure(go.Scatter(x=[1], y=[1], text=["a"], mode="markers+text", cliponaxis=True))
+    assert "cliponaxis_text" in _ids(pa.audit(fig))
+
+
+def test_scattergl_with_text_not_flagged():
+    # Scattergl has no cliponaxis property — flagging it would be a false positive
+    fig = go.Figure(go.Scattergl(x=[1], y=[1], text=["a"], mode="markers+text"))
+    assert "cliponaxis_text" not in _ids(pa.audit(fig))
+
+
+def test_hoverinfo_limited_not_flagged():
+    fig = go.Figure(go.Scatter(x=[1], y=[1], hoverinfo="x+y"))
+    assert "hover_disabled" not in _ids(pa.audit(fig))
+
+
 # ── hover disabled ─────────────────────────────────────────────────────────────
 
 def test_hoverinfo_none_flagged():

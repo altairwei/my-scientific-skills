@@ -124,11 +124,16 @@ def _check_duplicate_names(spec: dict) -> list[Finding]:
 
 def _check_cliponaxis_text(spec: dict) -> list[Finding]:
     # cliponaxis defaults to True (per the official figure-introspection doc); text
-    # labels crossing an axis line are clipped when it's True.
+    # labels crossing an axis line are clipped when it's True. Only the scatter
+    # family has a cliponaxis property — Scattergl/Scatter3d/Scattergeo/Scattermap
+    # reject it (update_traces(cliponaxis=...) raises ValueError there).
     out = []
     for i, tr in enumerate(_traces(spec)):
-        mode = tr.get("mode", "")
+        mode = tr.get("mode") or ""
         if "text" not in mode:
+            continue
+        ttype = tr.get("type", "scatter")
+        if "cliponaxis" not in tr and ttype not in ("scatter", "scatterpolar", "scatterternary"):
             continue
         clip = tr.get("cliponaxis")
         if clip is None or clip is True:
