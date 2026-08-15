@@ -1232,15 +1232,15 @@ Run:
 uv run --with plotly --with pandas python -c "
 import sys; sys.path.insert(0,'data-science/plotly-interactive-figures/scripts')
 import plotly_audit as pa, plotly.express as px, pandas as pd, numpy as np
-df = pd.DataFrame({'category':list('aabbcc'),'price':[10,12,20,22,30,33],'sales':[5,8,6,9,4,7],'region':['N','N','S','S','E','E']})
+df = pd.DataFrame({'category':[c for c in 'abc' for _ in range(8)],'price':[10,12,14,16,18,20,22,24,30,33,36,39,42,45,48,51,60,63,66,69,72,75,78,81],'sales':[5,8,6,9,4,7,5,6,4,3,5,7,6,4,5,8,3,6,4,7,5,6,4,8],'region':['N','S','E','W']*6})
 figs = [
   px.scatter(df,x='price',y='sales',color='category',hover_data=['region']),
   px.bar(df.groupby('category',as_index=False)['sales'].sum(),x='category',y='sales',color='category'),
   px.line(pd.DataFrame({'t':range(6),'revenue':[1,3,2,5,4,6],'region':['N','N','S','S','E','E']}),x='t',y='revenue',color='region'),
-  px.histogram(df,x='price',color='category',barmode='overlay'),
+  px.histogram(df,x='price',color='category',barmode='overlay',opacity=0.5),
   px.box(df,x='category',y='price',color='category'),
   px.violin(df,x='category',y='price',color='category',box=True),
-  px.imshow(np.array([[1,2,3],[4,5,6],[7,8,9]])),
+  px.imshow(np.array([[1.0,0.8,-0.4],[0.8,1.0,0.2],[-0.4,0.2,1.0]])),
 ]
 for i,f in enumerate(figs):
     fnd = [x for x in pa.audit(f) if x.severity in ('error','warn')]
