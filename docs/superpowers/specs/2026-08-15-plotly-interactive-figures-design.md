@@ -88,10 +88,11 @@ description: Make, verify, and debug Plotly interactive figures when you (the ag
 ```python
 # import-only, like figure_style.py; run via:
 #   uv run --with plotly --with pandas python -c "import plotly_audit as pa; print(pa.audit(fig))"
-def audit(fig_or_spec, df=None) -> list[Finding]:
+def audit(fig_or_spec) -> list[Finding]:
     """Accepts a go.Figure / px figure OR a parsed to_dict() dict — covers live
-    in-session audit AND pasted-JSON diagnosis. `df` optional, for axis-range-vs-data
-    and log-axis-with-zero invariants. Kaleido never required by the audit itself."""
+    in-session audit AND pasted-JSON diagnosis. The to_dict() spec is self-contained
+    (px expands the dataframe into data arrays), so the audit reads data values
+    straight from the spec — no df parameter. Kaleido never required by the audit."""
 ```
 
 `Finding = {id, severity (error|warn|info), message, fix_hint, doc_ref}`. `doc_ref` is a `plotly.com/python/<slug>/` URL.
@@ -101,14 +102,14 @@ Checks (each grounded in the cited official doc):
 | Check | doc_ref |
 |---|---|
 | empty trace / empty data | `/python/figure-structure/` |
-| axis range vs data mismatch (needs `df`) | `/python/axes/` |
+| axis range vs data mismatch | `/python/axes/` |
 | legend off-canvas (`legend.x`>0.9, etc.) | `/python/legend/` |
 | missing `hover_data` / `hovertemplate` | `/python/hover-text-and-formatting/` |
 | missing color field / mapping | `/python/discrete-color/`, `/python/colorscales/` |
 | `cliponaxis=True` with text labels → clipping | `/python/figure-introspection/` |
 | duplicate trace names → legend binding | `/python/legend/` |
 | margin too small for axis/title | `/python/setting-graph-size/`, `/python/axes/` |
-| log axis with zero/negative data (`log(0)`) (needs `df`) | `/python/log-plot/` + `interactive-repl` `plot-iteration.md` |
+| log axis with zero/negative data (`log(0)`) | `/python/log-plot/` + `interactive-repl` `plot-iteration.md` |
 
 ## References (grounding)
 

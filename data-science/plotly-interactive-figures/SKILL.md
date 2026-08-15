@@ -50,7 +50,8 @@ Default to the skeleton. Escalate to Kaleido only for the residual. Full model +
        print(f"[{f.severity}] {f.id}: {f.message}\n  fix: {f.fix_hint}\n  ref: {f.doc_ref}")
    ```
    Fix every `error`; triage `warn`s — `cliponaxis_text` is advisory ("labels may
-   clip"), so only act when your labels actually approach an axis. `pa.audit` needs
+   clip"), but `axis_range_excludes_data` means points won't render: treat data-loss
+   warns like errors. `info` findings are informational. `pa.audit` needs
    no Kaleido — it reads the `to_dict()` skeleton. `pa.audit(fig.to_dict())` also
    works on a pasted spec the user printed.
 4. **Deliver a notebook** (`.ipynb`) — assemble multiple figures + markdown commentary
@@ -74,6 +75,9 @@ Default to the skeleton. Escalate to Kaleido only for the residual. Full model +
 - **Persistent session / running cells → `interactive-repl`** (this skill is
   tool-agnostic: works with the `repl` MCP, your own Jupyter, or a script).
 - **`dash_bio` interactive Manhattan/QQ → deferred** (heavier Dash-ecosystem dep, not `px`).
+- **Real-time interaction monitoring (hover/click/selection callbacks) → out of scope** —
+  `FigureWidget` callbacks are technically possible but incompatible with the
+  conversational request/response agent model; interactivity is the user's, via the notebook.
 
 ## Honest limits
 

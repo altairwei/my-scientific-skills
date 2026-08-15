@@ -53,9 +53,9 @@ assert any("application/vnd.plotly.v1+json" in (o.get("data") or {})
            for c in code for o in c.get("outputs", []))
 ```
 
-If a `fig.show()` silently produced a plain-text repr or an error, `nbconvert` still
-exits 0 and writes the file — this assert is the only way to know the deliverable
-isn't empty. (The plotly mime type is what JupyterLab's plotly extension renders; a
+If a `fig.show()` silently degraded to a plain-text repr, `nbconvert` still exits 0
+and writes the file (a hard cell error exits 1 — caught either way) — this assert is
+the only way to know the deliverable isn't empty. (The plotly mime type is what JupyterLab's plotly extension renders; a
 user reporting "raw JSON" means the extension is missing on their side, not a
 notebook defect.)
 

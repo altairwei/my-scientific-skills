@@ -260,3 +260,19 @@ def test_margin_threshold_20_not_flagged():
     fig.update_layout(margin=dict(r=20),
                       annotations=[dict(text="note", x=0.98, y=0.5, xref="paper", yref="paper")])
     assert not any(i.startswith("margin_") for i in _ids(pa.audit(fig)))
+
+
+# ── legend bounds (Task 12 consolidation) ──────────────────────────────────────
+
+def test_legend_left_edge_flagged():
+    fig = go.Figure(go.Scatter(x=[1, 2], y=[1, 2]))
+    fig.update_layout(legend=dict(x=0.02, xanchor="right"))
+    assert "legend_off_canvas" in _ids(pa.audit(fig))
+
+
+def test_legend_boundaries_not_flagged():
+    fig = go.Figure(go.Scatter(x=[1, 2], y=[1, 2]))
+    fig.update_layout(legend=dict(x=1.0, xanchor="left"))
+    assert "legend_off_canvas" not in _ids(pa.audit(fig))
+    fig.update_layout(legend=dict(x=0.05, xanchor="right"))
+    assert "legend_off_canvas" not in _ids(pa.audit(fig))

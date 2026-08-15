@@ -192,6 +192,8 @@ def _check_legend_off_canvas(spec: dict) -> list[Finding]:
     leg = _layout(spec).get("legend")
     if not isinstance(leg, dict):
         return out
+    if leg.get("xref") not in (None, "paper"):
+        return out   # container-relative legend x — not edge-judgeable from the skeleton
     x = leg.get("x")
     xa = leg.get("xanchor", "left")
     if _is_num(x):

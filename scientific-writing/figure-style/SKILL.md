@@ -102,6 +102,8 @@ import). No `uv`? `curl -LsSf https://astral.sh/uv/install.sh | sh`, or run
   `paper-narrative`.
 - **Reading values off someone else's figure in a PDF** → `pdf-explore`
   (`render` + `crop`).
+- **Interactive Plotly figures (hover/zoom, `px`) → `plotly-interactive-figures`**
+  (JSON-spec verification; this skill's render-then-verify assumes you can `Read` PNGs).
 
 ## Notes
 
