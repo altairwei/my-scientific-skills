@@ -30,7 +30,8 @@
       "strict": false,
       "skills": [
         "./data-science/exploratory-data-analysis",
-        "./data-science/interactive-repl"
+        "./data-science/interactive-repl",
+        "./data-science/plotly-interactive-figures"
       ],
       "mcpServers": {
         "repl": {

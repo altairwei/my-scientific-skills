@@ -25,6 +25,7 @@ Skills for data analysis, statistics, and visualization.
 |-------|-------------|
 | [exploratory-data-analysis](data-science/exploratory-data-analysis/) | Guides Claude through a structured exploratory data analysis of a tabular dataset |
 | [interactive-repl](data-science/interactive-repl/) | Persistent R/Python REPL via one MCP server (`repl`) with per-session language prefixes (`r:` / `py:`) — iterate in-session instead of re-running scripts; auto plot capture, variable inspection, sidecar injection; HPC/Slurm compute-node sessions |
+| [plotly-interactive-figures](data-science/plotly-interactive-figures/) | Make, verify, and debug Plotly interactive figures without visual capability — diagnose plotting problems through the figure's JSON spec (`to_dict`/`to_json`, `full_figure_for_development`) instead of seeing the render; delivers a multi-figure `.ipynb` notebook with markdown commentary; `px`-first, Kaleido as optional escalation |
 
 ### biomedical-data
 
