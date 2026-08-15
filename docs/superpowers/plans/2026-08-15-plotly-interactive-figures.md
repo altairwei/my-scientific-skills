@@ -967,7 +967,8 @@ rendering. Three depths, escalate only when the shallower one can't settle the p
 Plotly Express expands the dataframe into `data[].x`/`data[].y` arrays, so the skeleton
 is self-contained: it carries the data. The audit (`scripts/plotly_audit.py`) operates
 here. Also: `print(fig)` pretty-prints the spec; `fig.show("json")` gives an interactive
-drilldown in JupyterLab.
+drilldown in JupyterLab. (Add the skill's `scripts/` to `sys.path` first — the exact
+preamble is in SKILL.md's Audit step.)
 
 ```
 import plotly_audit as pa
@@ -1002,9 +1003,10 @@ fig.write_image("fig.png")   # needs kaleido
 
 If `Read` returns "Unsupported Image" (some environments can't render PNGs), fall back
 to verifying key distribution stats numerically — `print(df[col].describe())` — and slow
-down: when vision is unavailable, data-layer reasoning is *more* error-prone (a real
-session attributed empty `scale_y_log10` panels to "censored markers" when the true
-cause was `log(0)` undefined). See `interactive-repl`'s `references/plot-iteration.md`.
+down: when vision is unavailable, data-layer reasoning is *more* error-prone — even
+with a render, a real session misread empty `scale_y_log10` panels as "censored
+markers" when the true cause was `log(0)` undefined (looking is necessary, not
+sufficient). See `interactive-repl`'s `references/plot-iteration.md`.
 
 ## The cliponaxis case study (canonical, from the official docs)
 
