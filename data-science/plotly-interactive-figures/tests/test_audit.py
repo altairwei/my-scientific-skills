@@ -146,3 +146,30 @@ def test_no_colorway_not_flagged():
     fig = go.Figure([go.Scatter(x=[1], y=[1], name="a"),
                      go.Scatter(x=[1], y=[2], name="b")])
     assert "colorway_shorter_than_traces" not in _ids(pa.audit(fig))
+
+
+# ── log axis nonpositive ───────────────────────────────────────────────────────
+
+def test_log_axis_with_zero_flagged():
+    fig = go.Figure(go.Scatter(x=[1, 2, 3], y=[1, 0, 4]))
+    fig.update_yaxes(type="log")
+    assert "log_axis_nonpositive" in _ids(pa.audit(fig))
+
+
+def test_log_axis_all_positive_not_flagged():
+    fig = go.Figure(go.Scatter(x=[1, 2, 3], y=[1, 10, 100]))
+    fig.update_yaxes(type="log")
+    assert "log_axis_nonpositive" not in _ids(pa.audit(fig))
+
+
+# ── axis range excludes data ───────────────────────────────────────────────────
+
+def test_manual_range_excluding_data_flagged():
+    fig = go.Figure(go.Scatter(x=[1, 2, 3, 4], y=[1, 2, 3, 4]))
+    fig.update_xaxes(range=[0, 3])   # x=4 is outside
+    assert "axis_range_excludes_data" in _ids(pa.audit(fig))
+
+
+def test_autorange_not_flagged():
+    fig = go.Figure(go.Scatter(x=[1, 2, 3, 4], y=[1, 2, 3, 4]))
+    assert "axis_range_excludes_data" not in _ids(pa.audit(fig))

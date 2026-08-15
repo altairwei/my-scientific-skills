@@ -194,6 +194,58 @@ def _check_colorway_short(spec: dict) -> list[Finding]:
     return out
 
 
+def _axis_vals(spec: dict, trace_key: str) -> list:
+    vals = []
+    for tr in _traces(spec):
+        data = tr.get(trace_key)
+        if isinstance(data, (list, tuple)):
+            vals.extend(v for v in data if _is_num(v))
+    return vals
+
+
+def _check_log_axis_nonpositive(spec: dict) -> list[Finding]:
+    out = []
+    layout = _layout(spec)
+    for axis_key, trace_key in (("xaxis", "x"), ("yaxis", "y")):
+        ax = layout.get(axis_key)
+        if not isinstance(ax, dict) or ax.get("type") != "log":
+            continue
+        vals = _axis_vals(spec, trace_key)
+        nonpos = [v for v in vals if v <= 0]
+        if nonpos:
+            out.append(Finding("log_axis_nonpositive", "error",
+                f"{axis_key} is log-scaled but {len(nonpos)} of {len(vals)} data points are ≤ 0 — log(0) is undefined; these points vanish",
+                "use a log axis only for strictly positive data, or transform (e.g. sqrt), or filter ≤0 first",
+                DOC + "log-plot/"))
+    return out
+
+
+def _check_axis_range_excludes_data(spec: dict) -> list[Finding]:
+    out = []
+    layout = _layout(spec)
+    for axis_key, trace_key in (("xaxis", "x"), ("yaxis", "y")):
+        ax = layout.get(axis_key)
+        if not isinstance(ax, dict):
+            continue
+        rng = ax.get("range")
+        if not (isinstance(rng, list) and len(rng) == 2 and all(_is_num(v) for v in rng)):
+            continue
+        lo, hi = rng
+        if lo > hi:
+            lo, hi = hi, lo              # autorange-reversed
+        vals = _axis_vals(spec, trace_key)
+        if not vals:
+            continue
+        outside = [v for v in vals if v < lo or v > hi]
+        if outside:
+            out.append(Finding("axis_range_excludes_data", "warn",
+                f"{axis_key}.range=[{rng[0]},{rng[1]}] excludes {len(outside)}/{len(vals)} data points — they will not render",
+                "widen the range, or set range=None (autorange) so Plotly.js computes it from the data",
+                DOC + "axes/"))
+    return out
+
+
 _CHECKS = [_check_empty_traces, _check_duplicate_names,
            _check_cliponaxis_text, _check_hover_disabled,
-           _check_legend_off_canvas, _check_colorway_short]
+           _check_legend_off_canvas, _check_colorway_short,
+           _check_log_axis_nonpositive, _check_axis_range_excludes_data]
